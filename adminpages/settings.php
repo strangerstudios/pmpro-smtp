@@ -82,6 +82,15 @@ function pmpro_smtp_render_connection_tab() {
 	$backup_connector_key = get_option( 'pmpro_smtp_backup_connector', '' );
 	$test_mode            = get_option( 'pmpro_smtp_test_mode', false );
 	$connectors           = pmpro_smtp_get_connectors();
+	$effective_from_email = apply_filters( 'wp_mail_from', get_option( 'admin_email' ) );
+	$effective_from_name  = apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) );
+	$pmpro_active         = defined( 'PMPRO_VERSION' );
+	$sender_settings_url  = $pmpro_active
+		? admin_url( 'admin.php?page=pmpro-emailsettings' )
+		: admin_url( 'options-general.php' );
+	$sender_settings_text = $pmpro_active
+		? __( 'Edit sender settings in PMPro Email Settings', 'pmpro-smtp' )
+		: __( 'Edit sender settings in WordPress General Settings', 'pmpro-smtp' );
 	?>
 	<form method="post">
 		<?php wp_nonce_field( 'pmpro_smtp_settings_connection', 'pmpro_smtp_settings_nonce' ); ?>
@@ -95,6 +104,24 @@ function pmpro_smtp_render_connection_tab() {
 			</div>
 			<div class="pmpro_section_inside">
 				<p><?php esc_html_e( 'Choose the service you want to use to send your site\'s emails. Select a provider and enter its credentials below.', 'pmpro-smtp' ); ?></p>
+
+				<table class="form-table">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Current Sender', 'pmpro-smtp' ); ?></th>
+							<td>
+								<p>
+									<strong><?php echo esc_html( $effective_from_name ); ?></strong>
+									&lt;<?php echo esc_html( $effective_from_email ); ?>&gt;
+								</p>
+								<p class="description">
+									<?php esc_html_e( 'By default, PMPro SMTP uses your existing WordPress or Paid Memberships Pro sender settings.', 'pmpro-smtp' ); ?>
+									<a href="<?php echo esc_url( $sender_settings_url ); ?>"><?php echo esc_html( $sender_settings_text ); ?></a>
+								</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
 
 				<div class="pmpro-smtp-connector-grid">
 					<?php foreach ( $connectors as $key => $connector ) : ?>

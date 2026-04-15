@@ -68,6 +68,12 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 				'sensitive' => true,
 				'desc'      => __( 'Your SMTP password or app password. Stored encrypted.', 'pmpro-smtp' ),
 			),
+			array(
+				'key'   => 'force_from_email',
+				'label' => __( 'Sender Address Compatibility', 'pmpro-smtp' ),
+				'type'  => 'checkbox',
+				'desc'  => __( 'Use the SMTP username as the From email address for this connection. Some SMTP servers require the sender address to match the authenticated account.', 'pmpro-smtp' ),
+			),
 		);
 	}
 
@@ -169,5 +175,21 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 			$phpmailer->Username = $username;
 			$phpmailer->Password = $password;
 		}
+	}
+
+	/**
+	 * Force the sender email to the SMTP username when enabled.
+	 *
+	 * @return string
+	 */
+	protected function get_forced_from_email() {
+		$force_from_email = (bool) $this->get_setting( 'force_from_email', false );
+		$username         = $this->get_setting( 'username' );
+
+		if ( $force_from_email && is_email( $username ) ) {
+			return $username;
+		}
+
+		return '';
 	}
 }

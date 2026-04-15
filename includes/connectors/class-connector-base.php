@@ -98,6 +98,11 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 * @return string
 	 */
 	protected function get_from_email() {
+		$forced_from_email = $this->get_forced_from_email();
+		if ( ! empty( $forced_from_email ) ) {
+			return $forced_from_email;
+		}
+
 		return apply_filters( 'wp_mail_from', get_option( 'admin_email' ) );
 	}
 
@@ -108,6 +113,15 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 */
 	protected function get_from_name() {
 		return apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) );
+	}
+
+	/**
+	 * Allow connectors to override the sender email for strict SMTP servers.
+	 *
+	 * @return string
+	 */
+	protected function get_forced_from_email() {
+		return '';
 	}
 
 	/**
