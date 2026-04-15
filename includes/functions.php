@@ -182,6 +182,105 @@ function pmpro_smtp_stash_from_data() {
 }
 
 /**
+ * Get or set SMTP debug data for the current request.
+ *
+ * @param array|null|false $set Optional. Array to set, false to clear, null to get.
+ * @return array
+ */
+function pmpro_smtp_debug_data( $set = null ) {
+	static $data = array(
+		'active'    => false,
+		'log'       => array(),
+		'error'     => '',
+		'exception' => '',
+	);
+
+	if ( null !== $set ) {
+		if ( false === $set ) {
+			$data = array(
+				'active'    => false,
+				'log'       => array(),
+				'error'     => '',
+				'exception' => '',
+			);
+		} else {
+			$data = array_merge( $data, $set );
+		}
+	}
+
+	return $data;
+}
+
+/**
+ * Begin collecting SMTP debug information for a test email request.
+ *
+ * @return void
+ */
+function pmpro_smtp_begin_debug_capture() {
+	pmpro_smtp_debug_data(
+		array(
+			'active'    => true,
+			'log'       => array(),
+			'error'     => '',
+			'exception' => '',
+		)
+	);
+}
+
+/**
+ * Stop collecting SMTP debug information.
+ *
+ * @return array
+ */
+function pmpro_smtp_end_debug_capture() {
+	$data = pmpro_smtp_debug_data();
+	pmpro_smtp_debug_data( false );
+	return $data;
+}
+
+/**
+ * Capture wp_mail failure details for the current debug request.
+ *
+ * @param WP_Error $error Failure object from wp_mail.
+ * @return void
+ */
+function pmpro_smtp_capture_wp_mail_failed( $error ) {
+	$data = pmpro_smtp_debug_data();
+	if ( empty( $data['active'] ) ) {
+		return;
+	}
+
+	$data['error'] = $error->get_error_message();
+	pmpro_smtp_debug_data( $data );
+}
+add_action( 'wp_mail_failed', 'pmpro_smtp_capture_wp_mail_failed' );
+
+/**
+ * Capture low-level PHPMailer SMTP debug output for the current debug request.
+ *
+ * @param PHPMailer\PHPMailer\PHPMailer $phpmailer PHPMailer instance.
+ * @return void
+ */
+function pmpro_smtp_capture_phpmailer_debug( $phpmailer ) {
+	$data = pmpro_smtp_debug_data();
+	if ( empty( $data['active'] ) ) {
+		return;
+	}
+
+	$phpmailer->SMTPDebug = 2;
+	$phpmailer->Debugoutput = static function( $message, $level ) {
+		$data = pmpro_smtp_debug_data();
+		if ( empty( $data['active'] ) ) {
+			return;
+		}
+
+		$data['log'][] = sprintf( '[%s] %s', $level, trim( $message ) );
+		pmpro_smtp_debug_data( $data );
+	};
+}
+add_action( 'phpmailer_init', 'pmpro_smtp_capture_phpmailer_debug', 5 );
+
+/**
  * Tell PMPro Hosting not to force its fallback SMTP transport when this plugin
  * is actively configured.
  *

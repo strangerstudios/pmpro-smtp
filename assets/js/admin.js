@@ -48,6 +48,39 @@
 		var $result = $( '#pmpro-smtp-test-result' );
 		var email   = $( '#pmpro-smtp-test-email' ).val();
 
+		function escapeHtml( text ) {
+			return $( '<div />' ).text( text || '' ).html();
+		}
+
+		function renderError( data ) {
+			var message = pmproSMTP.i18n.testFailed;
+			var details = '';
+			var hint    = '';
+
+			if ( typeof data === 'string' ) {
+				message += data;
+			} else {
+				message += ( data && data.message ) ? data.message : 'Request failed.';
+				details = data && data.details ? data.details : '';
+				hint    = data && data.hint ? data.hint : '';
+			}
+
+			var html = '<p>' + escapeHtml( message ) + '</p>';
+
+			if ( hint ) {
+				html += '<p><strong>Hint:</strong> ' + escapeHtml( hint ) + '</p>';
+			}
+
+			if ( details ) {
+				html += '<details class="pmpro-smtp-debug-details"><summary>Show debug details</summary><pre>' + escapeHtml( details ) + '</pre></details>';
+			}
+
+			$result
+				.addClass( 'notice notice-error' )
+				.html( html )
+				.show();
+		}
+
 		$button.prop( 'disabled', true ).text( pmproSMTP.i18n.sending );
 		$result.hide().removeClass( 'notice-success notice-error' );
 
@@ -60,20 +93,14 @@
 			if ( response.success ) {
 				$result
 					.addClass( 'notice notice-success' )
-					.html( '<p>' + response.data + '</p>' )
+					.html( '<p>' + escapeHtml( response.data ) + '</p>' )
 					.show();
 			} else {
-				$result
-					.addClass( 'notice notice-error' )
-					.html( '<p>' + pmproSMTP.i18n.testFailed + response.data + '</p>' )
-					.show();
+				renderError( response.data );
 			}
 		} )
 		.fail( function() {
-			$result
-				.addClass( 'notice notice-error' )
-				.html( '<p>' + pmproSMTP.i18n.testFailed + 'Request failed.' + '</p>' )
-				.show();
+			renderError( 'Request failed.' );
 		} )
 		.always( function() {
 			$button.prop( 'disabled', false ).text( 'Send Test Email' );

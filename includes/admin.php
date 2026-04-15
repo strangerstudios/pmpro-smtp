@@ -122,6 +122,8 @@ function pmpro_smtp_ajax_send_test() {
 		'attachments' => array(),
 	);
 
+	pmpro_smtp_begin_debug_capture();
+
 	$result = wp_mail(
 		$atts['to'],
 		$atts['subject'],
@@ -130,12 +132,39 @@ function pmpro_smtp_ajax_send_test() {
 		$atts['attachments']
 	);
 
+	$debug = pmpro_smtp_end_debug_capture();
+
 	if ( pmpro_smtp_is_test_mode() ) {
 		wp_send_json_success( __( 'Sandbox mode is active. The test email was not delivered.', 'pmpro-smtp' ) );
 	}
 
 	if ( ! $result ) {
-		wp_send_json_error( __( 'WordPress could not send the test email. Check your provider settings and email logs for details.', 'pmpro-smtp' ) );
+		$message = ! empty( $debug['error'] ) ? $debug['error'] : __( 'WordPress could not send the test email.', 'pmpro-smtp' );
+		$details = array();
+
+		if ( ! empty( $debug['log'] ) ) {
+			$details[] = implode( "\n", $debug['log'] );
+		}
+
+		$hint = '';
+		if ( 'generic' === $connector->get_name() ) {
+			$settings = get_option( 'pmpro_smtp_connector_generic', array() );
+			if (
+				! empty( $settings['host'] ) &&
+				false !== stripos( $settings['host'], 'gmail.com' ) &&
+				false !== stripos( $message, 'authenticate' )
+			) {
+				$hint = __( 'Gmail and Google Workspace usually require an app password here, not your normal account password. If the account is managed by Google Workspace, app passwords may also need to be enabled by the Workspace admin.', 'pmpro-smtp' );
+			}
+		}
+
+		wp_send_json_error(
+			array(
+				'message' => $message,
+				'details' => implode( "\n\n", array_filter( $details ) ),
+				'hint'    => $hint,
+			)
+		);
 	}
 
 	wp_send_json_success( sprintf( __( 'Test email sent to %s.', 'pmpro-smtp' ), esc_html( $to ) ) );
