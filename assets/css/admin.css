@@ -1,0 +1,216 @@
+/* ============================================================================
+   PMPro SMTP – Admin Styles
+   ============================================================================ */
+
+/* ---- Connector grid ---- */
+.pmpro-smtp-connector-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 16px 0 24px;
+}
+
+.pmpro-smtp-connector-card {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	border: 2px solid #ddd;
+	border-radius: 4px;
+	background: #fff;
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s;
+	min-width: 160px;
+}
+
+.pmpro-smtp-connector-card:hover {
+	border-color: #2271b1;
+}
+
+.pmpro-smtp-connector-card.is-selected {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.pmpro-smtp-connector-card input[type="radio"] {
+	margin: 0;
+	flex-shrink: 0;
+}
+
+.pmpro-smtp-connector-title {
+	font-weight: 500;
+	font-size: 13px;
+}
+
+/* ---- Connector settings panels ---- */
+.pmpro-smtp-connector-fields {
+	margin-top: 8px;
+}
+
+/* ---- Status badges ---- */
+.pmpro-smtp-status {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.pmpro-smtp-status--sent {
+	background: #d1fae5;
+	color: #065f46;
+}
+
+.pmpro-smtp-status--failed {
+	background: #fee2e2;
+	color: #991b1b;
+}
+
+.pmpro-smtp-status--sandboxed {
+	background: #fef3c7;
+	color: #92400e;
+}
+
+/* ---- Log table ---- */
+.pmpro-smtp-log-table .column-date {
+	width: 160px;
+}
+
+.pmpro-smtp-log-table .column-to {
+	width: 220px;
+}
+
+.pmpro-smtp-log-table .column-connector {
+	width: 120px;
+}
+
+.pmpro-smtp-log-table .column-status {
+	width: 100px;
+}
+
+.pmpro-smtp-log-table .column-cb {
+	width: 30px;
+}
+
+.pmpro-smtp-error-snippet {
+	color: #b91c1c;
+	font-size: 12px;
+	font-style: italic;
+}
+
+/* ---- Log toolbar ---- */
+.pmpro-smtp-log-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 16px 0 8px;
+}
+
+.pmpro-smtp-search-form {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.pmpro-smtp-status-filters {
+	display: flex;
+	gap: 4px;
+}
+
+.pmpro-smtp-status-filter {
+	padding: 4px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #f6f7f7;
+	color: #2c3338;
+	text-decoration: none;
+	font-size: 13px;
+	transition: background 0.1s;
+}
+
+.pmpro-smtp-status-filter:hover {
+	background: #e9ecef;
+	color: #2c3338;
+}
+
+.pmpro-smtp-status-filter.active {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+}
+
+/* ---- Bulk actions bar ---- */
+.pmpro-smtp-log-bulk-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0;
+}
+
+.pmpro-smtp-log-count {
+	margin-left: 8px;
+	color: #646970;
+	font-size: 13px;
+	flex: 1;
+}
+
+/* ---- Empty state ---- */
+.pmpro-smtp-log-empty {
+	padding: 40px;
+	text-align: center;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	color: #646970;
+}
+
+/* ---- Detail view ---- */
+.pmpro-smtp-detail-table th {
+	width: 140px;
+	font-weight: 600;
+}
+
+.pmpro-smtp-detail-table pre {
+	background: #f6f7f7;
+	border: 1px solid #ddd;
+	padding: 10px 14px;
+	overflow-x: auto;
+	font-size: 12px;
+	margin: 0;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.pmpro-smtp-email-body {
+	background: #fff;
+	border: 1px solid #ddd;
+	padding: 16px;
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+.pmpro-smtp-error-message {
+	color: #b91c1c;
+}
+
+/* ---- Test email result ---- */
+#pmpro-smtp-test-result {
+	margin-top: 12px;
+	padding: 10px 14px;
+}
+
+#pmpro-smtp-test-result.notice-success {
+	border-left-color: #00a32a;
+}
+
+#pmpro-smtp-test-result.notice-error {
+	border-left-color: #d63638;
+}
+
+/* ---- Nav tabs spacing ---- */
+.nav-tab-wrapper + .tab-content {
+	padding-top: 20px;
+}
