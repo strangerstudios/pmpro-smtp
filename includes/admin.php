@@ -122,17 +122,20 @@ function pmpro_smtp_ajax_send_test() {
 		'attachments' => array(),
 	);
 
-	// Apply from overrides.
-	$atts = pmpro_smtp_apply_from_overrides( $atts );
+	$result = wp_mail(
+		$atts['to'],
+		$atts['subject'],
+		$atts['message'],
+		$atts['headers'],
+		$atts['attachments']
+	);
 
 	if ( pmpro_smtp_is_test_mode() ) {
-		wp_send_json_success( __( 'Sandbox mode is active — the test email was not actually sent, but it has been logged.', 'pmpro-smtp' ) );
+		wp_send_json_success( __( 'Sandbox mode is active. The test email was not delivered.', 'pmpro-smtp' ) );
 	}
 
-	$result = $connector->send( $atts );
-
-	if ( is_wp_error( $result ) ) {
-		wp_send_json_error( $result->get_error_message() );
+	if ( ! $result ) {
+		wp_send_json_error( __( 'WordPress could not send the test email. Check your provider settings and email logs for details.', 'pmpro-smtp' ) );
 	}
 
 	wp_send_json_success( sprintf( __( 'Test email sent to %s.', 'pmpro-smtp' ), esc_html( $to ) ) );

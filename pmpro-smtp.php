@@ -10,6 +10,9 @@
  * Domain Path: /languages
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
+ *
+ * Forked from Gravity SMTP by Gravity Forms, adapted by Paid Memberships Pro
+ * to provide a focused, no-upsells SMTP option for WordPress site owners.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -52,4 +55,3 @@ function pmpro_smtp_includes() {
 	}
 }
 add_action( 'plugins_loaded', 'pmpro_smtp_includes' );
-

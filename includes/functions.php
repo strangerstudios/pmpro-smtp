@@ -88,16 +88,18 @@ function pmpro_smtp_get_backup_connector() {
  * @return null|bool
  */
 function pmpro_smtp_pre_wp_mail( $return, $atts ) {
+	// Sandbox mode: short-circuit without sending.
+	if ( pmpro_smtp_is_test_mode() ) {
+		pmpro_smtp_stash_from_data();
+		do_action( 'wp_mail_succeeded', $atts );
+		return true;
+	}
+
 	$connector = pmpro_smtp_get_active_connector();
 
 	// No connector, or Generic SMTP (handled via phpmailer_init) — pass through.
 	if ( null === $connector || 'generic' === $connector->get_name() ) {
 		return $return;
-	}
-
-	// Sandbox mode: short-circuit without sending.
-	if ( pmpro_smtp_is_test_mode() ) {
-		return true;
 	}
 
 	// Send via primary connector.
@@ -113,11 +115,13 @@ function pmpro_smtp_pre_wp_mail( $return, $atts ) {
 
 	// Fire wp_mail_succeeded / wp_mail_failed so PMPro's email log picks them up.
 	if ( is_wp_error( $result ) ) {
+		pmpro_smtp_stash_from_data();
 		$error = new WP_Error( $result->get_error_code(), $result->get_error_message(), $atts );
 		do_action( 'wp_mail_failed', $error );
 		return false;
 	}
 
+	pmpro_smtp_stash_from_data();
 	do_action( 'wp_mail_succeeded', $atts );
 	return true;
 }
@@ -154,6 +158,48 @@ add_action( 'phpmailer_init', 'pmpro_smtp_phpmailer_init' );
 function pmpro_smtp_is_test_mode() {
 	return (bool) get_option( 'pmpro_smtp_test_mode', false );
 }
+
+/**
+ * Prime PMPro's from-data stash for send paths that bypass PHPMailer.
+ *
+ * PMPro's email log normally captures the final sender via phpmailer_init. API
+ * connectors and sandbox mode short-circuit before PHPMailer runs, so we stash
+ * the same values here when PMPro's helper is available.
+ *
+ * @return void
+ */
+function pmpro_smtp_stash_from_data() {
+	if ( ! function_exists( 'pmpro_stashed_from_data' ) ) {
+		return;
+	}
+
+	pmpro_stashed_from_data(
+		array(
+			'from'      => apply_filters( 'wp_mail_from', get_option( 'admin_email' ) ),
+			'from_name' => apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) ),
+		)
+	);
+}
+
+/**
+ * Tell PMPro Hosting not to force its fallback SMTP transport when this plugin
+ * is actively configured.
+ *
+ * PMPro Hosting uses local SMTP by default on hosted production sites. When a
+ * third-party mailer plugin is configured, we want PMPro Hosting to stand down
+ * so only one transport handles the message.
+ *
+ * @param bool $detected Whether a third-party mailer has already been detected.
+ * @return bool
+ */
+function pmpro_smtp_mark_as_third_party_mailer( $detected ) {
+	if ( $detected ) {
+		return true;
+	}
+
+	return null !== pmpro_smtp_get_active_connector();
+}
+add_filter( 'pmpro_hosting_has_third_party_mailer', 'pmpro_smtp_mark_as_third_party_mailer' );
 
 // ============================================================================
 // Encryption
