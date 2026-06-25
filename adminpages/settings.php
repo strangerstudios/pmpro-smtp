@@ -56,14 +56,14 @@ function pmpro_smtp_settings_page() {
 		// is unavailable. In that case suppress the green "Settings saved." notice
 		// so the admin is not given a false success signal for the credential, and
 		// show the error notice instead.
-		$encrypt_unavailable = (bool) get_transient( 'pmpro_smtp_encrypt_unavailable' );
+		$encrypt_unavailable = (bool) get_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id() );
 		?>
 
 		<?php if ( $saved && ! $encrypt_unavailable ) : ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Settings saved.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
 
-		<?php if ( $encrypt_unavailable ) : delete_transient( 'pmpro_smtp_encrypt_unavailable' ); ?>
+		<?php if ( $encrypt_unavailable ) : delete_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id() ); ?>
 			<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'The OpenSSL PHP extension is not available, so credentials cannot be stored securely. Your secret was not saved. Please enable OpenSSL on your server before entering credentials.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
 
@@ -360,7 +360,7 @@ function pmpro_smtp_save_connection_settings() {
 
 				// Refuse to store secrets in plaintext when encryption is unavailable.
 				if ( ! pmpro_smtp_can_encrypt() ) {
-					set_transient( 'pmpro_smtp_encrypt_unavailable', 1, 60 );
+					set_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id(), 1, 60 );
 					continue; // Keep existing value rather than storing an empty/plaintext secret.
 				}
 

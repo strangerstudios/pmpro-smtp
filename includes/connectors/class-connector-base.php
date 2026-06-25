@@ -122,6 +122,18 @@ abstract class PMPRO_SMTP_Connector_Base {
 	}
 
 	/**
+	 * Public accessor for the From address that would be used for a message with
+	 * the given headers. Used by the Send Test Email tool to display the sender
+	 * that production mail will actually use.
+	 *
+	 * @param array|string $headers
+	 * @return array { email: string, name: string }
+	 */
+	public function get_resolved_from( $headers = array() ) {
+		return $this->resolve_from( $headers );
+	}
+
+	/**
 	 * Resolve the sender (From) for an outgoing message.
 	 *
 	 * Order of precedence, matching what WordPress core's PHPMailer path does:
@@ -138,18 +150,6 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 * @param array|string $headers Raw message headers (string or array).
 	 * @return array { email: string, name: string }
 	 */
-	/**
-	 * Public accessor for the From address that would be used for a message with
-	 * the given headers. Used by the Send Test Email tool to display the sender
-	 * that production mail will actually use.
-	 *
-	 * @param array|string $headers
-	 * @return array { email: string, name: string }
-	 */
-	public function get_resolved_from( $headers = array() ) {
-		return $this->resolve_from( $headers );
-	}
-
 	protected function resolve_from( $headers = array() ) {
 		// NOTE: get_forced_from_email() only returns non-empty for the Generic
 		// connector, which sends via configure_phpmailer() on the phpmailer_init
@@ -375,10 +375,18 @@ abstract class PMPRO_SMTP_Connector_Base {
 			$char = $value[ $i ];
 
 			if ( '"' === $char ) {
-				// Respect a backslash-escaped quote inside a quoted string.
-				if ( $in_quotes && $i > 0 && '\\' === $value[ $i - 1 ] ) {
-					$current .= $char;
-					continue;
+				// Respect a backslash-escaped quote inside a quoted string. Count
+				// the run of preceding backslashes: an odd count escapes this
+				// quote, an even count (e.g. an escaped backslash \\") does not.
+				if ( $in_quotes ) {
+					$backslashes = 0;
+					for ( $j = $i - 1; $j >= 0 && '\\' === $value[ $j ]; $j-- ) {
+						$backslashes++;
+					}
+					if ( 1 === ( $backslashes % 2 ) ) {
+						$current .= $char;
+						continue;
+					}
 				}
 				$in_quotes = ! $in_quotes;
 				$current  .= $char;

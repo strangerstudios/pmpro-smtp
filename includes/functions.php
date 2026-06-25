@@ -322,6 +322,11 @@ function pmpro_smtp_capture_phpmailer_debug( $phpmailer ) {
 			return;
 		}
 
+		// Re-read the store: pmpro_smtp_redact_smtp_debug_line() mutates the
+		// auth_payload_lines counter, so the $data captured above is stale.
+		// Writing it back would clobber that counter and break redaction of the
+		// AUTH payload line(s) that follow.
+		$data          = pmpro_smtp_debug_data();
 		$data['log'][] = sprintf( '[%s] %s', $level, $line );
 		pmpro_smtp_debug_data( $data );
 	};

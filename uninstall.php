@@ -43,7 +43,9 @@ function pmpro_smtp_delete_site_options( $connector_keys ) {
 		delete_option( 'pmpro_smtp_connector_' . $key );
 	}
 
-	delete_transient( 'pmpro_smtp_encrypt_unavailable' );
+	// The encrypt-unavailable notice is a per-user, 60-second transient
+	// (pmpro_smtp_encrypt_unavailable_<user_id>); it self-expires long before
+	// uninstall, so there is nothing durable to clean up here.
 }
 
 if ( is_multisite() ) {
