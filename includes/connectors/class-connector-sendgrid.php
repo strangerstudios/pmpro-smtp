@@ -44,12 +44,14 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 			return new WP_Error( 'pmpro_smtp_missing_api_key', __( 'SendGrid API key is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+
+		$from       = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		$from_email = $from['email'];
+		$from_name  = $from['name'];
 
 		$to_parsed = array();
-		$to        = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
-		foreach ( $to as $recipient ) {
+		foreach ( $this->normalize_recipients( $atts['to'] ) as $recipient ) {
 			$parsed      = $this->parse_recipient( $recipient );
 			$to_entry    = array( 'email' => $parsed['email'] );
 			if ( ! empty( $parsed['name'] ) ) {
@@ -58,11 +60,10 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 			$to_parsed[] = $to_entry;
 		}
 
-		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
 		$subject = $atts['subject'];
 		$message = $atts['message'];
 
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$content = array(
 			array(
@@ -73,11 +74,13 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 
 		$personalization = array( 'to' => $to_parsed );
 
-		if ( ! empty( $headers['cc'] ) ) {
-			$personalization['cc'] = array( array( 'email' => $headers['cc'] ) );
+		$cc = $this->build_address_objects( isset( $headers['cc'] ) ? $headers['cc'] : '' );
+		if ( ! empty( $cc ) ) {
+			$personalization['cc'] = $cc;
 		}
-		if ( ! empty( $headers['bcc'] ) ) {
-			$personalization['bcc'] = array( array( 'email' => $headers['bcc'] ) );
+		$bcc = $this->build_address_objects( isset( $headers['bcc'] ) ? $headers['bcc'] : '' );
+		if ( ! empty( $bcc ) ) {
+			$personalization['bcc'] = $bcc;
 		}
 
 		$body = array(
@@ -91,17 +94,24 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 		);
 
 		if ( ! empty( $headers['reply-to'] ) ) {
-			$body['reply_to'] = array( 'email' => $headers['reply-to'] );
+			$reply = $this->build_reply_to_object( $headers['reply-to'] );
+			if ( ! empty( $reply ) ) {
+				$body['reply_to'] = $reply;
+			}
 		}
 
 		if ( ! empty( $atts['attachments'] ) ) {
 			$attachments = array();
 			foreach ( (array) $atts['attachments'] as $file ) {
 				if ( file_exists( $file ) ) {
+					$contents = file_get_contents( $file );
+					if ( false === $contents ) {
+						continue;
+					}
 					$attachments[] = array(
-						'content'  => base64_encode( file_get_contents( $file ) ),
+						'content'  => base64_encode( $contents ),
 						'filename' => basename( $file ),
-						'type'     => mime_content_type( $file ),
+						'type'     => $this->get_mime_type( $file ),
 					);
 				}
 			}
@@ -128,7 +138,12 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 			$body_response = wp_remote_retrieve_body( $response );
 			$decoded       = json_decode( $body_response, true );
 			$message       = ! empty( $decoded['errors'][0]['message'] ) ? $decoded['errors'][0]['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'SendGrid error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+				/* translators: 1: HTTP response code, 2: error message from SendGrid */
+				__( 'SendGrid error (%1$d): %2$s', 'pmpro-smtp' ),
+				$code,
+				$message
+			) );
 		}
 
 		return true;

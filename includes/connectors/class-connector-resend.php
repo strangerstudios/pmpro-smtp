@@ -44,13 +44,14 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 			return new WP_Error( 'pmpro_smtp_missing_api_key', __( 'Resend API key is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		$from_email = $sender['email'];
+		$from_name  = $sender['name'];
 		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
 
-		$to      = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
+		$to      = $this->normalize_recipients( $atts['to'] );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'from'    => $from,
@@ -64,23 +65,29 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 			$body['text'] = $atts['message'];
 		}
 
-		if ( ! empty( $headers['cc'] ) ) {
-			$body['cc'] = array( $headers['cc'] );
+		$cc = $this->split_address_list( isset( $headers['cc'] ) ? $headers['cc'] : '' );
+		if ( ! empty( $cc ) ) {
+			$body['cc'] = $cc;
 		}
-		if ( ! empty( $headers['bcc'] ) ) {
-			$body['bcc'] = array( $headers['bcc'] );
+		$bcc = $this->split_address_list( isset( $headers['bcc'] ) ? $headers['bcc'] : '' );
+		if ( ! empty( $bcc ) ) {
+			$body['bcc'] = $bcc;
 		}
 		if ( ! empty( $headers['reply-to'] ) ) {
-			$body['reply_to'] = array( $headers['reply-to'] );
+			$body['reply_to'] = $this->split_address_list( $headers['reply-to'] );
 		}
 
 		if ( ! empty( $atts['attachments'] ) ) {
 			$attachments = array();
 			foreach ( (array) $atts['attachments'] as $file ) {
 				if ( file_exists( $file ) ) {
+					$contents = file_get_contents( $file );
+					if ( false === $contents ) {
+						continue;
+					}
 					$attachments[] = array(
 						'filename' => basename( $file ),
-						'content'  => base64_encode( file_get_contents( $file ) ),
+						'content'  => base64_encode( $contents ),
 					);
 				}
 			}
@@ -107,7 +114,12 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 			$body_response = wp_remote_retrieve_body( $response );
 			$decoded       = json_decode( $body_response, true );
 			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Resend error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+				/* translators: 1: HTTP response code, 2: error message from Resend */
+				__( 'Resend error (%1$d): %2$s', 'pmpro-smtp' ),
+				$code,
+				$message
+			) );
 		}
 
 		return true;

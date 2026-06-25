@@ -21,23 +21,11 @@
 			.addClass( 'is-selected' );
 	}
 
-	function syncBackupPanels() {
-		var selected = $( '#pmpro_smtp_backup_connector' ).val();
-
-		$( '.pmpro-smtp-backup-fields' ).hide();
-
-		if ( selected ) {
-			$( '#pmpro-smtp-backup-fields-' + selected ).show();
-		}
-	}
-
 	// Run on load.
 	syncConnectorPanels();
-	syncBackupPanels();
 
 	// Run on change.
 	$( document ).on( 'change', 'input[name="pmpro_smtp_active_connector"]', syncConnectorPanels );
-	$( document ).on( 'change', '#pmpro_smtp_backup_connector', syncBackupPanels );
 
 	// =========================================================================
 	// Test Email tab: AJAX send
@@ -60,7 +48,7 @@
 			if ( typeof data === 'string' ) {
 				message += data;
 			} else {
-				message += ( data && data.message ) ? data.message : 'Request failed.';
+				message += ( data && data.message ) ? data.message : pmproSMTP.i18n.requestFailed;
 				details = data && data.details ? data.details : '';
 				hint    = data && data.hint ? data.hint : '';
 			}
@@ -68,11 +56,11 @@
 			var html = '<p>' + escapeHtml( message ) + '</p>';
 
 			if ( hint ) {
-				html += '<p><strong>Hint:</strong> ' + escapeHtml( hint ) + '</p>';
+				html += '<p><strong>' + escapeHtml( pmproSMTP.i18n.hintLabel ) + '</strong> ' + escapeHtml( hint ) + '</p>';
 			}
 
 			if ( details ) {
-				html += '<details class="pmpro-smtp-debug-details"><summary>Show debug details</summary><pre>' + escapeHtml( details ) + '</pre></details>';
+				html += '<details class="pmpro-smtp-debug-details"><summary>' + escapeHtml( pmproSMTP.i18n.showDebug ) + '</summary><pre>' + escapeHtml( details ) + '</pre></details>';
 			}
 
 			$result
@@ -100,37 +88,11 @@
 			}
 		} )
 		.fail( function() {
-			renderError( 'Request failed.' );
+			renderError( pmproSMTP.i18n.requestFailed );
 		} )
 		.always( function() {
-			$button.prop( 'disabled', false ).text( 'Send Test Email' );
+			$button.prop( 'disabled', false ).text( pmproSMTP.i18n.sendButton );
 		} );
-	} );
-
-	// =========================================================================
-	// Email log: select-all checkbox
-	// =========================================================================
-
-	$( document ).on( 'change', '#pmpro-smtp-select-all', function() {
-		$( 'input[name="log_ids[]"]' ).prop( 'checked', $( this ).is( ':checked' ) );
-	} );
-
-	// Uncheck "select all" if any row is unchecked.
-	$( document ).on( 'change', 'input[name="log_ids[]"]', function() {
-		if ( ! $( this ).is( ':checked' ) ) {
-			$( '#pmpro-smtp-select-all' ).prop( 'checked', false );
-		}
-	} );
-
-	// Guard: prevent bulk delete with nothing selected.
-	$( document ).on( 'click', '#pmpro-smtp-bulk-apply', function( e ) {
-		var action  = $( '#pmpro-smtp-bulk-action' ).val();
-		var checked = $( 'input[name="log_ids[]"]:checked' ).length;
-
-		if ( 'delete' === action && checked === 0 ) {
-			e.preventDefault();
-			alert( 'Please select at least one entry to delete.' );
-		}
 	} );
 
 	// =========================================================================

@@ -12,6 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Get the base admin URL for this plugin's settings page.
+ *
+ * When Paid Memberships Pro is active the page lives under admin.php (the
+ * Memberships menu); otherwise it falls back to options-general.php (Settings).
+ * All in-page navigation must use this so links don't resolve to a
+ * non-existent page in the fallback case.
+ *
+ * @return string
+ */
+function pmpro_smtp_admin_base_url() {
+	$base = defined( 'PMPRO_VERSION' ) ? 'admin.php' : 'options-general.php';
+	return admin_url( $base );
+}
+
+/**
  * Render the settings page.
  */
 function pmpro_smtp_settings_page() {
@@ -34,8 +49,26 @@ function pmpro_smtp_settings_page() {
 
 	<div class="wrap pmpro_admin">
 
-		<?php if ( $saved ) : ?>
+		<h1><?php esc_html_e( 'SMTP Settings', 'pmpro-smtp' ); ?></h1>
+
+		<?php
+		// A secret may have been silently dropped during save because encryption
+		// is unavailable. In that case suppress the green "Settings saved." notice
+		// so the admin is not given a false success signal for the credential, and
+		// show the error notice instead.
+		$encrypt_unavailable = (bool) get_transient( 'pmpro_smtp_encrypt_unavailable' );
+		?>
+
+		<?php if ( $saved && ! $encrypt_unavailable ) : ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Settings saved.', 'pmpro-smtp' ); ?></p></div>
+		<?php endif; ?>
+
+		<?php if ( $encrypt_unavailable ) : delete_transient( 'pmpro_smtp_encrypt_unavailable' ); ?>
+			<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'The OpenSSL PHP extension is not available, so credentials cannot be stored securely. Your secret was not saved. Please enable OpenSSL on your server before entering credentials.', 'pmpro-smtp' ); ?></p></div>
+		<?php endif; ?>
+
+		<?php if ( ! defined( 'PMPRO_VERSION' ) ) : ?>
+			<div class="notice notice-warning"><p><?php esc_html_e( 'Paid Memberships Pro is not active. PMPro SMTP is designed to work alongside Paid Memberships Pro and relies on it for sender settings and email logging.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
 
 		<?php if ( pmpro_smtp_is_test_mode() ) : ?>
@@ -48,10 +81,10 @@ function pmpro_smtp_settings_page() {
 			<h2 id="pmpro-smtp-menu" class="screen-reader-text"><?php esc_html_e( 'Settings Sections', 'pmpro-smtp' ); ?></h2>
 			<ul>
 				<?php foreach ( $tabs as $tab_key => $tab_label ) :
-					$url   = add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => $tab_key ), admin_url( 'admin.php' ) );
+					$url = add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => $tab_key ), pmpro_smtp_admin_base_url() );
 					?>
 					<li>
-						<a href="<?php echo esc_url( $url ); ?>"<?php echo ( $tab_key === $active_tab ) ? ' class="current"' : '' ?> ><?php echo esc_html( $tab_label ); ?></a>
+						<a href="<?php echo esc_url( $url ); ?>"<?php echo ( $tab_key === $active_tab ) ? ' class="current" aria-current="page"' : ''; ?>><?php echo esc_html( $tab_label ); ?></a>
 					</li>
 				<?php endforeach; ?>
 			</ul>
@@ -82,8 +115,14 @@ function pmpro_smtp_render_connection_tab() {
 	$backup_connector_key = get_option( 'pmpro_smtp_backup_connector', '' );
 	$test_mode            = get_option( 'pmpro_smtp_test_mode', false );
 	$connectors           = pmpro_smtp_get_connectors();
-	$effective_from_email = apply_filters( 'wp_mail_from', get_option( 'admin_email' ) );
-	$effective_from_name  = apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) );
+	// Seed the filters with the same defaults WordPress core uses so the
+	// displayed sender matches what is actually sent (and so PMPro's
+	// wp_mail_from override, which only fires on the core default, applies here
+	// too). The default address is derived by the shared connector helper, which
+	// mirrors wp-includes/pluggable.php, so this display cannot drift from what
+	// the connectors actually send.
+	$effective_from_email = apply_filters( 'wp_mail_from', PMPRO_SMTP_Connector_Base::default_from_email() );
+	$effective_from_name  = apply_filters( 'wp_mail_from_name', 'WordPress' );
 	$pmpro_active         = defined( 'PMPRO_VERSION' );
 	$sender_settings_url  = $pmpro_active
 		? admin_url( 'admin.php?page=pmpro-emailsettings' )
@@ -214,6 +253,7 @@ function pmpro_smtp_render_connection_tab() {
 			</div>
 			<div class="pmpro_section_inside">
 				<p><?php esc_html_e( 'Optionally configure a secondary provider. If your primary provider fails, PMPro SMTP will automatically retry with the backup.', 'pmpro-smtp' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Automatic failover applies only when your primary provider is an API connector. When the primary provider is Custom SMTP, WordPress sends through PHPMailer directly and the backup is not used.', 'pmpro-smtp' ); ?></p>
 				<table class="form-table">
 					<tbody>
 						<tr>
@@ -268,6 +308,12 @@ function pmpro_smtp_render_connection_tab() {
 }
 
 function pmpro_smtp_save_connection_settings() {
+	// Explicit capability check — do not rely solely on the menu registration
+	// gate so authorization survives any future change to how this runs.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
+
 	$connectors = pmpro_smtp_get_connectors();
 
 	// Active connector.
@@ -311,6 +357,13 @@ function pmpro_smtp_save_connection_settings() {
 				if ( '' === $raw_value ) {
 					continue; // Empty = keep existing.
 				}
+
+				// Refuse to store secrets in plaintext when encryption is unavailable.
+				if ( ! pmpro_smtp_can_encrypt() ) {
+					set_transient( 'pmpro_smtp_encrypt_unavailable', 1, 60 );
+					continue; // Keep existing value rather than storing an empty/plaintext secret.
+				}
+
 				$connector_data[ $field['key'] ] = pmpro_smtp_encrypt( $raw_value );
 			} else {
 				$connector_data[ $field['key'] ] = sanitize_text_field( $raw_value );
@@ -342,7 +395,7 @@ function pmpro_smtp_render_test_tab() {
 				<p><?php printf(
 					/* translators: %s: link to Connection tab */
 					esc_html__( 'No provider is configured. %s to set up an email provider before sending a test.', 'pmpro-smtp' ),
-					'<a href="' . esc_url( add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => 'connection' ), admin_url( 'admin.php' ) ) ) . '">' . esc_html__( 'Go to the Connection tab', 'pmpro-smtp' ) . '</a>'
+					'<a href="' . esc_url( add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => 'connection' ), pmpro_smtp_admin_base_url() ) ) . '">' . esc_html__( 'Go to the Connection tab', 'pmpro-smtp' ) . '</a>'
 				); ?></p>
 			<?php else : ?>
 				<p>
@@ -365,7 +418,7 @@ function pmpro_smtp_render_test_tab() {
 				<p>
 					<button type="button" id="pmpro-smtp-send-test" class="button button-primary"><?php esc_html_e( 'Send Test Email', 'pmpro-smtp' ); ?></button>
 				</p>
-				<div id="pmpro-smtp-test-result" style="display:none;" class="notice inline"></div>
+				<div id="pmpro-smtp-test-result" class="notice inline" role="status" aria-live="polite" style="display:none;"></div>
 			<?php endif; ?>
 		</div>
 	</div>

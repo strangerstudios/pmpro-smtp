@@ -44,13 +44,14 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 			return new WP_Error( 'pmpro_smtp_missing_token', __( 'Postmark server token is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		$from_email = $sender['email'];
+		$from_name  = $sender['name'];
 		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
 
-		$to      = is_array( $atts['to'] ) ? implode( ', ', $atts['to'] ) : $atts['to'];
+		$to      = implode( ', ', $this->normalize_recipients( $atts['to'] ) );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'From'    => $from,
@@ -78,10 +79,14 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 			$attachments = array();
 			foreach ( (array) $atts['attachments'] as $file ) {
 				if ( file_exists( $file ) ) {
+					$contents = file_get_contents( $file );
+					if ( false === $contents ) {
+						continue;
+					}
 					$attachments[] = array(
 						'Name'        => basename( $file ),
-						'Content'     => base64_encode( file_get_contents( $file ) ),
-						'ContentType' => mime_content_type( $file ),
+						'Content'     => base64_encode( $contents ),
+						'ContentType' => $this->get_mime_type( $file ),
 					);
 				}
 			}
@@ -109,7 +114,12 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 			$body_response = wp_remote_retrieve_body( $response );
 			$decoded       = json_decode( $body_response, true );
 			$message       = ! empty( $decoded['Message'] ) ? $decoded['Message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Postmark error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+				/* translators: 1: HTTP response code, 2: error message from Postmark */
+				__( 'Postmark error (%1$d): %2$s', 'pmpro-smtp' ),
+				$code,
+				$message
+			) );
 		}
 
 		return true;

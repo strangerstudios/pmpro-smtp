@@ -44,12 +44,12 @@ class PMPRO_SMTP_Connector_Mailersend extends PMPRO_SMTP_Connector_Base {
 			return new WP_Error( 'pmpro_smtp_missing_token', __( 'MailerSend API token is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		$from_email = $sender['email'];
+		$from_name  = $sender['name'];
 
 		$to_parsed = array();
-		$to        = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
-		foreach ( $to as $recipient ) {
+		foreach ( $this->normalize_recipients( $atts['to'] ) as $recipient ) {
 			$parsed   = $this->parse_recipient( $recipient );
 			$to_entry = array( 'email' => $parsed['email'] );
 			if ( ! empty( $parsed['name'] ) ) {
@@ -59,7 +59,7 @@ class PMPRO_SMTP_Connector_Mailersend extends PMPRO_SMTP_Connector_Base {
 		}
 
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$from_field = array( 'email' => $from_email );
 		if ( ! empty( $from_name ) ) {
@@ -78,23 +78,32 @@ class PMPRO_SMTP_Connector_Mailersend extends PMPRO_SMTP_Connector_Base {
 			$body['text'] = $atts['message'];
 		}
 
-		if ( ! empty( $headers['cc'] ) ) {
-			$body['cc'] = array( array( 'email' => $headers['cc'] ) );
+		$cc = $this->build_address_objects( isset( $headers['cc'] ) ? $headers['cc'] : '' );
+		if ( ! empty( $cc ) ) {
+			$body['cc'] = $cc;
 		}
-		if ( ! empty( $headers['bcc'] ) ) {
-			$body['bcc'] = array( array( 'email' => $headers['bcc'] ) );
+		$bcc = $this->build_address_objects( isset( $headers['bcc'] ) ? $headers['bcc'] : '' );
+		if ( ! empty( $bcc ) ) {
+			$body['bcc'] = $bcc;
 		}
 		if ( ! empty( $headers['reply-to'] ) ) {
-			$body['reply_to'] = array( 'email' => $headers['reply-to'] );
+			$reply = $this->build_reply_to_object( $headers['reply-to'] );
+			if ( ! empty( $reply ) ) {
+				$body['reply_to'] = $reply;
+			}
 		}
 
 		if ( ! empty( $atts['attachments'] ) ) {
 			$attachments = array();
 			foreach ( (array) $atts['attachments'] as $file ) {
 				if ( file_exists( $file ) ) {
+					$contents = file_get_contents( $file );
+					if ( false === $contents ) {
+						continue;
+					}
 					$attachments[] = array(
 						'filename' => basename( $file ),
-						'content'  => base64_encode( file_get_contents( $file ) ),
+						'content'  => base64_encode( $contents ),
 					);
 				}
 			}
@@ -122,7 +131,12 @@ class PMPRO_SMTP_Connector_Mailersend extends PMPRO_SMTP_Connector_Base {
 			$body_response = wp_remote_retrieve_body( $response );
 			$decoded       = json_decode( $body_response, true );
 			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'MailerSend error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+				/* translators: 1: HTTP response code, 2: error message from MailerSend */
+				__( 'MailerSend error (%1$d): %2$s', 'pmpro-smtp' ),
+				$code,
+				$message
+			) );
 		}
 
 		return true;

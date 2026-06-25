@@ -78,70 +78,31 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 	}
 
 	/**
-	 * For the Generic connector the actual phpmailer configuration happens in
-	 * pmpro_smtp_phpmailer_init() via the 'phpmailer_init' hook so that WordPress's
-	 * standard wp_mail() flow handles recipients, body, attachments, etc.
+	 * The Generic connector never sends through this method.
 	 *
-	 * This do_send() implementation is only used for the Send Test Email tool.
+	 * Real mail and the Send Test Email tool both call WordPress's wp_mail(),
+	 * which for the Generic connector is configured via the phpmailer_init hook
+	 * (see pmpro_smtp_phpmailer_init() -> configure_phpmailer()). The
+	 * pre_wp_mail interception in pmpro_smtp_pre_wp_mail() also passes the
+	 * Generic connector straight through without calling send()/do_send(). This
+	 * implementation only exists to satisfy the abstract base class.
 	 *
 	 * @param array $atts
-	 * @return true|WP_Error
+	 * @return WP_Error
 	 */
 	protected function do_send( array $atts ) {
-		require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
-		require_once ABSPATH . WPINC . '/PHPMailer/SMTP.php';
-		require_once ABSPATH . WPINC . '/PHPMailer/Exception.php';
-
-		$phpmailer = new PHPMailer\PHPMailer\PHPMailer( true );
-
-		try {
-			$this->configure_phpmailer( $phpmailer );
-
-			$phpmailer->setFrom( $this->get_from_email(), $this->get_from_name() );
-
-			$to = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
-			foreach ( $to as $recipient ) {
-				$parsed = $this->parse_recipient( $recipient );
-				$phpmailer->addAddress( $parsed['email'], $parsed['name'] );
-			}
-
-			$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-			if ( ! empty( $headers['cc'] ) ) {
-				$phpmailer->addCC( $headers['cc'] );
-			}
-			if ( ! empty( $headers['bcc'] ) ) {
-				$phpmailer->addBCC( $headers['bcc'] );
-			}
-			if ( ! empty( $headers['reply-to'] ) ) {
-				$phpmailer->addReplyTo( $headers['reply-to'] );
-			}
-			if ( ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false ) {
-				$phpmailer->isHTML( true );
-			}
-
-			$phpmailer->Subject = $atts['subject'];
-			$phpmailer->Body    = $atts['message'];
-
-			if ( ! empty( $atts['attachments'] ) ) {
-				foreach ( (array) $atts['attachments'] as $file ) {
-					if ( file_exists( $file ) ) {
-						$phpmailer->addAttachment( $file );
-					}
-				}
-			}
-
-			$phpmailer->send();
-			return true;
-
-		} catch ( PHPMailer\PHPMailer\Exception $e ) {
-			return new WP_Error( 'pmpro_smtp_send_failed', $e->getMessage() );
-		}
+		return new WP_Error(
+			'pmpro_smtp_generic_uses_phpmailer',
+			__( 'The Custom SMTP connector sends via WordPress core (phpmailer_init), not the API send path.', 'pmpro-smtp' )
+		);
 	}
 
 	/**
 	 * Configure an existing PHPMailer instance with our SMTP settings.
 	 *
-	 * Used by both do_send() (test email) and the phpmailer_init hook.
+	 * Runs on the phpmailer_init hook for every email (real and test) when the
+	 * Generic connector is active, so the From-address handling here applies to
+	 * both production and test mail.
 	 *
 	 * @param PHPMailer\PHPMailer\PHPMailer $phpmailer
 	 */
@@ -174,6 +135,20 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 		if ( $auth ) {
 			$phpmailer->Username = $username;
 			$phpmailer->Password = $password;
+		}
+
+		// Sender Address Compatibility: force the From address to the SMTP
+		// username for strict servers. This must run on the phpmailer_init path
+		// (not just a test-only send) so it affects real outgoing mail too.
+		$forced_from = $this->get_forced_from_email();
+		if ( ! empty( $forced_from ) ) {
+			// WordPress core has already resolved the From name (from the
+			// message's From: header and/or the wp_mail_from_name filter) and set
+			// it on the PHPMailer instance before phpmailer_init runs. Preserve
+			// that name and only override the address. The third argument (false)
+			// prevents PHPMailer from auto-overriding the address again.
+			$from_name = '' !== $phpmailer->FromName ? $phpmailer->FromName : $this->get_from_name();
+			$phpmailer->setFrom( $forced_from, $from_name, false );
 		}
 	}
 

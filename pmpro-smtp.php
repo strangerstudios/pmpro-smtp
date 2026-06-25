@@ -8,6 +8,9 @@
  * Author URI: https://www.paidmembershipspro.com
  * Text Domain: pmpro-smtp
  * Domain Path: /languages
+ * Requires at least: 6.5
+ * Requires PHP: 7.4
+ * Requires Plugins: paid-memberships-pro
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *

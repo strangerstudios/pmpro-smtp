@@ -67,13 +67,14 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		$base_url = ( 'eu' === $region ) ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
 		$api_url  = $base_url . '/v3/' . $domain . '/messages';
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		$from_email = $sender['email'];
+		$from_name  = $sender['name'];
 		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
 
-		$to      = is_array( $atts['to'] ) ? implode( ', ', $atts['to'] ) : $atts['to'];
+		$to      = implode( ', ', $this->normalize_recipients( $atts['to'] ) );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'from'    => $from,
@@ -101,20 +102,38 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		if ( ! empty( $atts['attachments'] ) ) {
 			foreach ( (array) $atts['attachments'] as $file ) {
 				if ( file_exists( $file ) ) {
+					$contents = file_get_contents( $file );
+					if ( false === $contents ) {
+						continue;
+					}
 					$files[] = array(
-						'name'     => 'attachment[]',
 						'filename' => basename( $file ),
-						'contents' => file_get_contents( $file ),
+						'type'     => $this->get_mime_type( $file ),
+						'contents' => $contents,
 					);
 				}
 			}
 		}
 
+		$request_headers = array(
+			'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ),
+		);
+
+		// Mailgun expects file attachments as multipart/form-data uploads. The
+		// WordPress HTTP API does not build multipart bodies from an array, so
+		// when there are attachments we construct the multipart body manually
+		// and set the matching Content-Type boundary header.
+		if ( ! empty( $files ) ) {
+			$boundary       = wp_generate_password( 24, false );
+			$request_body   = $this->build_multipart_body( $body, $files, $boundary );
+			$request_headers['Content-Type'] = 'multipart/form-data; boundary=' . $boundary;
+		} else {
+			$request_body = $body;
+		}
+
 		$response = wp_safe_remote_post( $api_url, array(
-			'headers' => array(
-				'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ),
-			),
-			'body'    => $body,
+			'headers' => $request_headers,
+			'body'    => $request_body,
 			'timeout' => 15,
 		) );
 
@@ -127,9 +146,55 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 			$body_response = wp_remote_retrieve_body( $response );
 			$decoded       = json_decode( $body_response, true );
 			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Mailgun error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+				/* translators: 1: HTTP response code, 2: error message from Mailgun */
+				__( 'Mailgun error (%1$d): %2$s', 'pmpro-smtp' ),
+				$code,
+				$message
+			) );
 		}
 
 		return true;
+	}
+
+	/**
+	 * Build a multipart/form-data request body for Mailgun (fields + file uploads).
+	 *
+	 * @param array  $fields   Scalar form fields (from, to, subject, body, etc.).
+	 * @param array  $files    File parts, each { filename, type, contents }.
+	 * @param string $boundary Multipart boundary string.
+	 * @return string
+	 */
+	protected function build_multipart_body( array $fields, array $files, $boundary ) {
+		$eol  = "\r\n";
+		$data = '';
+
+		foreach ( $fields as $name => $value ) {
+			$name = str_replace( array( "\r", "\n", '"' ), '', (string) $name );
+			// Strip CR/LF from the value too. On the pre_wp_mail short-circuit path
+			// WordPress core never runs its usual subject/header CRLF sanitization,
+			// so a value containing a CRLF + "--<boundary>" could otherwise inject an
+			// additional MIME part into the Mailgun request. Mirrors the filename/
+			// name handling above. (Double-quotes are legal in a form-data value.)
+			$value = str_replace( array( "\r", "\n" ), '', (string) $value );
+			$data .= '--' . $boundary . $eol;
+			$data .= 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol;
+			$data .= $value . $eol;
+		}
+
+		foreach ( $files as $file ) {
+			// Strip CR/LF and double-quotes from the filename so it cannot break
+			// out of the filename token and inject additional MIME part headers.
+			$filename = str_replace( array( "\r", "\n", '"' ), '', (string) $file['filename'] );
+			$type     = str_replace( array( "\r", "\n", '"' ), '', (string) $file['type'] );
+			$data    .= '--' . $boundary . $eol;
+			$data    .= 'Content-Disposition: form-data; name="attachment"; filename="' . $filename . '"' . $eol;
+			$data    .= 'Content-Type: ' . $type . $eol . $eol;
+			$data    .= $file['contents'] . $eol;
+		}
+
+		$data .= '--' . $boundary . '--' . $eol;
+
+		return $data;
 	}
 }

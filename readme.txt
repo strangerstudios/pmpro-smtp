@@ -1,6 +1,6 @@
 === Paid Memberships Pro - SMTP ===
 Contributors: strangerstudios
-Requires at least: 6.3
+Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
 Stable tag: 0.1
@@ -24,6 +24,10 @@ Features include:
 * Compatibility with Paid Memberships Pro email logging.
 
 From name and from email settings remain managed by WordPress and Paid Memberships Pro.
+
+Paid Memberships Pro is required. PMPro SMTP uses Paid Memberships Pro for sender settings and email logging, and its settings screen lives under the Memberships menu.
+
+Automatic backup failover applies only when the primary provider is an API connector. When the primary provider is Custom SMTP, WordPress sends through PHPMailer directly, so the configured backup provider is not used.
 
 == Installation ==
 
@@ -49,6 +53,10 @@ Yes. Use the `Custom SMTP` connector with:
 = Does this replace PMPro email logging? =
 
 No. PMPro core continues to handle email logging.
+
+= Why does my email header/footer look different on an API provider? =
+
+PMPro applies its optional `email_header.html` / `email_footer.html` theme templates (and `wpautop`/`make_clickable`) on the `phpmailer_init` action. API connectors (SendGrid, Mailgun, Postmark, Brevo, Resend, MailerSend) send via the provider's HTTP API and short-circuit WordPress before PHPMailer is constructed, so those legacy theme header/footer files are not applied on the API path. The `Custom SMTP` connector goes through PHPMailer and applies them as usual. If your theme ships those header/footer files and you need them on every send, use the `Custom SMTP` connector. (Most PMPro email templates already include their own HTML wrapping and are unaffected.)
 
 == Changelog ==
 
