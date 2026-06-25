@@ -45,6 +45,7 @@ function pmpro_smtp_includes() {
 	require_once PMPRO_SMTP_DIR . '/includes/connectors/class-connector-brevo.php';
 	require_once PMPRO_SMTP_DIR . '/includes/connectors/class-connector-resend.php';
 	require_once PMPRO_SMTP_DIR . '/includes/connectors/class-connector-mailersend.php';
+	require_once PMPRO_SMTP_DIR . '/includes/connectors/class-connector-microsoft365.php';
 
 	// Core.
 	require_once PMPRO_SMTP_DIR . '/includes/functions.php';

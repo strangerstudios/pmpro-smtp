@@ -156,6 +156,21 @@ function pmpro_smtp_ajax_send_test() {
 			) {
 				$hint = __( 'Gmail and Google Workspace usually require an app password here, not your normal account password. If the account is managed by Google Workspace, app passwords may also need to be enabled by the Workspace admin.', 'pmpro-smtp' );
 			}
+
+			if (
+				! empty( $settings['host'] ) &&
+				(
+					false !== stripos( $settings['host'], 'office365.com' ) ||
+					false !== stripos( $settings['host'], 'outlook.com' )
+				) &&
+				(
+					false !== stripos( $message, 'authenticate' ) ||
+					false !== stripos( $message, '5.7.3' ) ||
+					false !== stripos( $message, '5.7.57' )
+				)
+			) {
+				$hint = __( 'Microsoft 365 often disables SMTP AUTH for the tenant or mailbox. Use the Microsoft 365 / Outlook provider to send through Microsoft Graph without storing a mailbox password, or ask the Microsoft 365 admin to enable authenticated SMTP only for this mailbox.', 'pmpro-smtp' );
+			}
 		}
 
 		wp_send_json_error(
@@ -170,6 +185,82 @@ function pmpro_smtp_ajax_send_test() {
 	wp_send_json_success( sprintf( __( 'Test email sent to %s.', 'pmpro-smtp' ), esc_html( $to ) ) );
 }
 add_action( 'wp_ajax_pmpro_smtp_send_test', 'pmpro_smtp_ajax_send_test' );
+
+// ============================================================================
+// Admin actions: Microsoft 365 OAuth
+// ============================================================================
+
+/**
+ * Redirect an admin to Microsoft for OAuth authorization.
+ */
+function pmpro_smtp_admin_microsoft365_connect() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'Permission denied.', 'pmpro-smtp' ) );
+	}
+
+	check_admin_referer( 'pmpro_smtp_microsoft365_connect' );
+
+	$connector      = new PMPRO_SMTP_Connector_Microsoft365();
+	$state          = wp_generate_password( 32, false, false );
+	$code_verifier  = wp_generate_password( 64, false, false );
+	$code_challenge = rtrim( strtr( base64_encode( hash( 'sha256', $code_verifier, true ) ), '+/', '-_' ), '=' );
+
+	set_transient(
+		'pmpro_smtp_microsoft365_state_' . $state,
+		array(
+			'user_id'       => get_current_user_id(),
+			'session_token' => wp_get_session_token(),
+			'code_verifier' => $code_verifier,
+		),
+		10 * MINUTE_IN_SECONDS
+	);
+
+	$url = $connector->build_authorization_url( $state, $code_challenge );
+	if ( is_wp_error( $url ) ) {
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'                           => 'pmpro-smtp',
+					'tab'                            => 'connection',
+					'pmpro_smtp_microsoft365_error' => $url->get_error_message(),
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	wp_redirect( $url );
+	exit;
+}
+add_action( 'admin_post_pmpro_smtp_microsoft365_connect', 'pmpro_smtp_admin_microsoft365_connect' );
+
+/**
+ * Disconnect Microsoft 365 by deleting stored OAuth tokens.
+ */
+function pmpro_smtp_admin_microsoft365_disconnect() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'Permission denied.', 'pmpro-smtp' ) );
+	}
+
+	check_admin_referer( 'pmpro_smtp_microsoft365_disconnect' );
+
+	$connector = new PMPRO_SMTP_Connector_Microsoft365();
+	$connector->disconnect();
+
+	wp_safe_redirect(
+		add_query_arg(
+			array(
+				'page'                                  => 'pmpro-smtp',
+				'tab'                                   => 'connection',
+				'pmpro_smtp_microsoft365_disconnected' => '1',
+			),
+			admin_url( 'admin.php' )
+		)
+	);
+	exit;
+}
+add_action( 'admin_post_pmpro_smtp_microsoft365_disconnect', 'pmpro_smtp_admin_microsoft365_disconnect' );
 
 // ============================================================================
 // Settings link on Plugins page

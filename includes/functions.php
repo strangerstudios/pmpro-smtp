@@ -31,7 +31,8 @@ function pmpro_smtp_get_connectors() {
 			'postmark'   => new PMPRO_SMTP_Connector_Postmark(),
 			'brevo'      => new PMPRO_SMTP_Connector_Brevo(),
 			'resend'     => new PMPRO_SMTP_Connector_Resend(),
-			'mailersend' => new PMPRO_SMTP_Connector_Mailersend(),
+			'mailersend'   => new PMPRO_SMTP_Connector_Mailersend(),
+			'microsoft365' => new PMPRO_SMTP_Connector_Microsoft365(),
 		);
 
 		/**

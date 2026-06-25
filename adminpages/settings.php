@@ -38,6 +38,10 @@ function pmpro_smtp_settings_page() {
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Settings saved.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
 
+		<?php settings_errors( 'pmpro_smtp' ); ?>
+
+		<?php pmpro_smtp_render_microsoft365_notices(); ?>
+
 		<?php if ( pmpro_smtp_is_test_mode() ) : ?>
 			<div class="notice notice-warning">
 				<p><strong><?php esc_html_e( 'Sandbox Mode Active', 'pmpro-smtp' ); ?></strong> &mdash; <?php esc_html_e( 'Emails are not being delivered. Disable sandbox mode when you are ready to send.', 'pmpro-smtp' ); ?></p>
@@ -200,6 +204,11 @@ function pmpro_smtp_render_connection_tab() {
 								<?php endforeach; ?>
 							</tbody>
 						</table>
+						<?php
+						if ( 'microsoft365' === $key ) {
+							pmpro_smtp_render_microsoft365_oauth_controls( $connector );
+						}
+						?>
 					</div>
 				<?php endforeach; ?>
 			</div>
@@ -267,6 +276,117 @@ function pmpro_smtp_render_connection_tab() {
 	<?php
 }
 
+/**
+ * Render Microsoft 365 OAuth notices.
+ *
+ * @return void
+ */
+function pmpro_smtp_render_microsoft365_notices() {
+	if ( ! empty( $_GET['pmpro_smtp_microsoft365_connected'] ) ) {
+		?>
+		<div class="notice notice-success is-dismissible">
+			<p><?php esc_html_e( 'Microsoft 365 account connected.', 'pmpro-smtp' ); ?></p>
+		</div>
+		<?php
+	}
+
+	if ( ! empty( $_GET['pmpro_smtp_microsoft365_disconnected'] ) ) {
+		?>
+		<div class="notice notice-success is-dismissible">
+			<p><?php esc_html_e( 'Microsoft 365 account disconnected.', 'pmpro-smtp' ); ?></p>
+		</div>
+		<?php
+	}
+
+	if ( ! empty( $_GET['pmpro_smtp_microsoft365_error'] ) ) {
+		$error = sanitize_text_field( wp_unslash( $_GET['pmpro_smtp_microsoft365_error'] ) );
+		?>
+		<div class="notice notice-error">
+			<p><?php echo esc_html( $error ); ?></p>
+		</div>
+		<?php
+	}
+}
+
+/**
+ * Render Microsoft 365 redirect URI and OAuth buttons.
+ *
+ * @param PMPRO_SMTP_Connector_Microsoft365 $connector Connector.
+ * @return void
+ */
+function pmpro_smtp_render_microsoft365_oauth_controls( $connector ) {
+	$settings            = get_option( 'pmpro_smtp_connector_microsoft365', array() );
+	$authenticated_email = isset( $settings['authenticated_email'] ) ? sanitize_email( $settings['authenticated_email'] ) : '';
+	$mailbox             = $connector->get_mailbox();
+	$is_connected        = $connector->is_connected();
+	$connect_url         = wp_nonce_url(
+		add_query_arg(
+			array(
+				'action' => 'pmpro_smtp_microsoft365_connect',
+			),
+			admin_url( 'admin-post.php' )
+		),
+		'pmpro_smtp_microsoft365_connect'
+	);
+	$disconnect_url      = wp_nonce_url(
+		add_query_arg(
+			array(
+				'action' => 'pmpro_smtp_microsoft365_disconnect',
+			),
+			admin_url( 'admin-post.php' )
+		),
+		'pmpro_smtp_microsoft365_disconnect'
+	);
+	?>
+	<table class="form-table">
+		<tbody>
+			<tr>
+				<th scope="row"><label for="pmpro-smtp-microsoft365-redirect-uri"><?php esc_html_e( 'Redirect URI', 'pmpro-smtp' ); ?></label></th>
+				<td>
+					<input type="text" id="pmpro-smtp-microsoft365-redirect-uri" class="regular-text code" readonly value="<?php echo esc_attr( $connector->get_redirect_uri() ); ?>" onclick="this.select();" />
+					<p class="description"><?php esc_html_e( 'Copy this exact URI into the Redirect URI list for your Microsoft Entra app registration.', 'pmpro-smtp' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Connection Status', 'pmpro-smtp' ); ?></th>
+				<td>
+					<?php if ( $is_connected ) : ?>
+						<p>
+							<strong><?php esc_html_e( 'Connected', 'pmpro-smtp' ); ?></strong>
+							<?php if ( ! empty( $authenticated_email ) ) : ?>
+								<?php
+								printf(
+									/* translators: %s: authenticated Microsoft email */
+									esc_html__( 'as %s', 'pmpro-smtp' ),
+									esc_html( $authenticated_email )
+								);
+								?>
+							<?php endif; ?>
+						</p>
+						<?php if ( ! empty( $authenticated_email ) && ! empty( $mailbox ) && strtolower( $authenticated_email ) !== strtolower( $mailbox ) ) : ?>
+							<p class="notice notice-warning inline">
+								<?php esc_html_e( 'The authenticated account differs from the configured mailbox. Sending will only work if Microsoft grants this account permission to send as that mailbox.', 'pmpro-smtp' ); ?>
+							</p>
+						<?php endif; ?>
+					<?php else : ?>
+						<p><strong><?php esc_html_e( 'Not connected', 'pmpro-smtp' ); ?></strong></p>
+					<?php endif; ?>
+					<p>
+						<a class="button button-primary" href="<?php echo esc_url( $connect_url ); ?>">
+							<?php echo $is_connected ? esc_html__( 'Reconnect Microsoft 365', 'pmpro-smtp' ) : esc_html__( 'Connect Microsoft 365', 'pmpro-smtp' ); ?>
+						</a>
+						<?php if ( $is_connected ) : ?>
+							<a class="button" href="<?php echo esc_url( $disconnect_url ); ?>"><?php esc_html_e( 'Disconnect', 'pmpro-smtp' ); ?></a>
+						<?php endif; ?>
+					</p>
+					<p class="description"><?php esc_html_e( 'Save Client ID, Client Secret, tenant settings, and mailbox before connecting.', 'pmpro-smtp' ); ?></p>
+				</td>
+			</tr>
+		</tbody>
+	</table>
+	<?php
+}
+
 function pmpro_smtp_save_connection_settings() {
 	$connectors = pmpro_smtp_get_connectors();
 
@@ -279,7 +399,7 @@ function pmpro_smtp_save_connection_settings() {
 
 	// Backup connector.
 	$backup = isset( $_POST['pmpro_smtp_backup_connector'] ) ? sanitize_key( wp_unslash( $_POST['pmpro_smtp_backup_connector'] ) ) : '';
-	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup ) ) {
+	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup || $backup === $active ) ) {
 		$backup = '';
 	}
 	update_option( 'pmpro_smtp_backup_connector', $backup );
@@ -312,6 +432,22 @@ function pmpro_smtp_save_connection_settings() {
 					continue; // Empty = keep existing.
 				}
 				$connector_data[ $field['key'] ] = pmpro_smtp_encrypt( $raw_value );
+			} elseif ( 'email' === $field['type'] ) {
+				$value = sanitize_email( $raw_value );
+				if ( '' !== $value && ! is_email( $value ) ) {
+					add_settings_error(
+						'pmpro_smtp',
+						'pmpro_smtp_invalid_' . $key . '_' . $field['key'],
+						sprintf(
+							/* translators: %s: field label */
+							__( '%s must be a valid email address.', 'pmpro-smtp' ),
+							$field['label']
+						),
+						'error'
+					);
+					continue;
+				}
+				$connector_data[ $field['key'] ] = $value;
 			} else {
 				$connector_data[ $field['key'] ] = sanitize_text_field( $raw_value );
 			}

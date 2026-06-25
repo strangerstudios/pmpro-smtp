@@ -19,6 +19,7 @@ Features include:
 
 * Generic SMTP support for providers like Google Workspace and Gmail app passwords.
 * API-based connectors for SendGrid, Mailgun, Postmark, Brevo, Resend, and MailerSend.
+* Microsoft 365 / Outlook OAuth support through Microsoft Graph sendMail.
 * Optional backup provider support for API connectors.
 * Sandbox mode for staging and testing.
 * Compatibility with Paid Memberships Pro email logging.
@@ -45,6 +46,10 @@ Yes. Use the `Custom SMTP` connector with:
 * Authentication: enabled
 * Username: your full Google email address
 * Password: your Google app password
+
+= Can I use this with Microsoft 365 or Outlook? =
+
+Yes. Use the `Microsoft 365 / Outlook` provider. It uses OAuth and Microsoft Graph sendMail, so you do not need to enter or store your Microsoft account password. See `docs/microsoft-365-outlook.md` for setup instructions.
 
 = Does this replace PMPro email logging? =
 
