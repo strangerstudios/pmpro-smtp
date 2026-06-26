@@ -51,20 +51,8 @@ function pmpro_smtp_settings_page() {
 
 		<h1><?php esc_html_e( 'SMTP Settings', 'pmpro-smtp' ); ?></h1>
 
-		<?php
-		// A secret may have been silently dropped during save because encryption
-		// is unavailable. In that case suppress the green "Settings saved." notice
-		// so the admin is not given a false success signal for the credential, and
-		// show the error notice instead.
-		$encrypt_unavailable = (bool) get_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id() );
-		?>
-
-		<?php if ( $saved && ! $encrypt_unavailable ) : ?>
+		<?php if ( $saved ) : ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Settings saved.', 'pmpro-smtp' ); ?></p></div>
-		<?php endif; ?>
-
-		<?php if ( $encrypt_unavailable ) : delete_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id() ); ?>
-			<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'The OpenSSL PHP extension is not available, so credentials cannot be stored securely. Your secret was not saved. Please enable OpenSSL on your server before entering credentials.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
 
 		<?php if ( ! defined( 'PMPRO_VERSION' ) ) : ?>
@@ -177,9 +165,6 @@ function pmpro_smtp_render_connection_tab() {
 
 				<?php foreach ( $connectors as $key => $connector ) :
 					$fields = $connector->get_settings_fields();
-					if ( empty( $fields ) ) {
-						continue;
-					}
 					$connector_settings = get_option( 'pmpro_smtp_connector_' . $key, array() );
 					?>
 					<div class="pmpro-smtp-connector-fields" id="pmpro-smtp-fields-<?php echo esc_attr( $key ); ?>" <?php echo ( $key !== $active_connector_key ) ? 'style="display:none;"' : ''; ?>>
@@ -358,13 +343,11 @@ function pmpro_smtp_save_connection_settings() {
 					continue; // Empty = keep existing.
 				}
 
-				// Refuse to store secrets in plaintext when encryption is unavailable.
-				if ( ! pmpro_smtp_can_encrypt() ) {
-					set_transient( 'pmpro_smtp_encrypt_unavailable_' . get_current_user_id(), 1, 60 );
-					continue; // Keep existing value rather than storing an empty/plaintext secret.
-				}
-
-				$connector_data[ $field['key'] ] = pmpro_smtp_encrypt( $raw_value );
+				// Store the secret raw (stripped of CR/LF/leading/trailing space)
+				// so passwords/tokens that legitimately contain characters
+				// sanitize_text_field() would mangle survive intact, mirroring how
+				// PMPro core stores gateway secrets.
+				$connector_data[ $field['key'] ] = trim( $raw_value );
 			} else {
 				$connector_data[ $field['key'] ] = sanitize_text_field( $raw_value );
 			}

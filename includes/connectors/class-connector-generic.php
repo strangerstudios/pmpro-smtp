@@ -66,7 +66,7 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'Password', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Your SMTP password or app password. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Your SMTP password or app password.', 'pmpro-smtp' ),
 			),
 			array(
 				'key'   => 'force_from_email',
@@ -74,26 +74,6 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 				'type'  => 'checkbox',
 				'desc'  => __( 'Use the SMTP username as the From email address for this connection. Some SMTP servers require the sender address to match the authenticated account.', 'pmpro-smtp' ),
 			),
-		);
-	}
-
-	/**
-	 * The Generic connector never sends through this method.
-	 *
-	 * Real mail and the Send Test Email tool both call WordPress's wp_mail(),
-	 * which for the Generic connector is configured via the phpmailer_init hook
-	 * (see pmpro_smtp_phpmailer_init() -> configure_phpmailer()). The
-	 * pre_wp_mail interception in pmpro_smtp_pre_wp_mail() also passes the
-	 * Generic connector straight through without calling send()/do_send(). This
-	 * implementation only exists to satisfy the abstract base class.
-	 *
-	 * @param array $atts
-	 * @return WP_Error
-	 */
-	protected function do_send( array $atts ) {
-		return new WP_Error(
-			'pmpro_smtp_generic_uses_phpmailer',
-			__( 'The Custom SMTP connector sends via WordPress core (phpmailer_init), not the API send path.', 'pmpro-smtp' )
 		);
 	}
 
@@ -108,11 +88,11 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 	 */
 	public function configure_phpmailer( $phpmailer ) {
 		$host       = $this->get_setting( 'host' );
-		$port       = (int) $this->get_setting( 'port', 587 );
+		$port       = (int) $this->get_setting( 'port' );
 		$encryption = $this->get_setting( 'encryption', '' );
 		$auth       = (bool) $this->get_setting( 'auth', false );
 		$username   = $this->get_setting( 'username' );
-		$password   = pmpro_smtp_decrypt( $this->get_setting( 'password' ) );
+		$password   = $this->get_setting( 'password' );
 
 		if ( empty( $host ) ) {
 			return;
@@ -140,31 +120,10 @@ class PMPRO_SMTP_Connector_Generic extends PMPRO_SMTP_Connector_Base {
 		// Sender Address Compatibility: force the From address to the SMTP
 		// username for strict servers. This must run on the phpmailer_init path
 		// (not just a test-only send) so it affects real outgoing mail too.
-		$forced_from = $this->get_forced_from_email();
-		if ( ! empty( $forced_from ) ) {
-			// WordPress core has already resolved the From name (from the
-			// message's From: header and/or the wp_mail_from_name filter) and set
-			// it on the PHPMailer instance before phpmailer_init runs. Preserve
-			// that name and only override the address. The third argument (false)
-			// prevents PHPMailer from auto-overriding the address again.
-			$from_name = '' !== $phpmailer->FromName ? $phpmailer->FromName : $this->get_from_name();
-			$phpmailer->setFrom( $forced_from, $from_name, false );
+		if ( (bool) $this->get_setting( 'force_from_email', false ) && is_email( $username ) ) {
+			// Preserve the resolved From name, override only the address.
+			$from_name = '' !== $phpmailer->FromName ? $phpmailer->FromName : apply_filters( 'wp_mail_from_name', 'WordPress' );
+			$phpmailer->setFrom( $username, $from_name, false );
 		}
-	}
-
-	/**
-	 * Force the sender email to the SMTP username when enabled.
-	 *
-	 * @return string
-	 */
-	protected function get_forced_from_email() {
-		$force_from_email = (bool) $this->get_setting( 'force_from_email', false );
-		$username         = $this->get_setting( 'username' );
-
-		if ( $force_from_email && is_email( $username ) ) {
-			return $username;
-		}
-
-		return '';
 	}
 }

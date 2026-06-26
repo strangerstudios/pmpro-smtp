@@ -26,15 +26,6 @@ abstract class PMPRO_SMTP_Connector_Base {
 	abstract public function get_title();
 
 	/**
-	 * Get a short description of this connector.
-	 *
-	 * @return string
-	 */
-	public function get_description() {
-		return '';
-	}
-
-	/**
 	 * Get the settings fields for this connector.
 	 *
 	 * Each field is an array with keys:
@@ -44,22 +35,19 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 *   - options    (array)   For select fields: value => label pairs.
 	 *   - desc       (string)  Optional help text.
 	 *   - placeholder (string) Optional placeholder.
-	 *   - sensitive  (bool)    If true, value is encrypted at rest and obfuscated in UI.
+	 *   - sensitive  (bool)    If true, the value is write-only in the UI (never echoed back).
 	 *
 	 * @return array
 	 */
 	abstract public function get_settings_fields();
 
 	/**
-	 * Perform the actual email send.
+	 * Send an email.
 	 *
-	 * Note on inline embeds: WordPress 6.9+ threads an $atts['embeds'] array of
-	 * inline (CID) attachments through wp_mail()/pre_wp_mail. The API connectors
-	 * reconstruct the message from $atts and do not map embeds to each provider's
-	 * inline-attachment/CID mechanism, so inline embeds are not supported on the
-	 * API-connector path (they ARE delivered on the Generic/PHPMailer path, which
-	 * runs through WordPress core). This is documented here so the limitation is
-	 * explicit rather than a silent surprise; see pmpro_smtp_pre_wp_mail().
+	 * Email logging is handled by PMPro core via wp_mail_succeeded / wp_mail_failed,
+	 * which are fired by pmpro_smtp_pre_wp_mail() after this returns. API connectors
+	 * override this; the Generic/Custom SMTP connector does not (it sends via
+	 * WordPress core on the phpmailer_init path and is passed straight through).
 	 *
 	 * @param array $atts {
 	 *     @type string|string[] $to          Recipient(s).
@@ -70,19 +58,8 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 * }
 	 * @return true|WP_Error True on success, WP_Error on failure.
 	 */
-	abstract protected function do_send( array $atts );
-
-	/**
-	 * Send an email.
-	 *
-	 * Email logging is handled by PMPro core via wp_mail_succeeded / wp_mail_failed,
-	 * which are fired by pmpro_smtp_pre_wp_mail() after this returns.
-	 *
-	 * @param array $atts Email attributes.
-	 * @return true|WP_Error
-	 */
 	public function send( array $atts ) {
-		return $this->do_send( $atts );
+		return new WP_Error( 'pmpro_smtp_no_send', __( 'This connector does not support direct sending.', 'pmpro-smtp' ) );
 	}
 
 	/**
@@ -118,137 +95,49 @@ abstract class PMPRO_SMTP_Connector_Base {
 
 		$filtered = apply_filters( 'wp_mail_content_type', 'text/plain' );
 
-		return is_string( $filtered ) && false !== stripos( $filtered, 'text/html' );
-	}
-
-	/**
-	 * Public accessor for the From address that would be used for a message with
-	 * the given headers. Used by the Send Test Email tool to display the sender
-	 * that production mail will actually use.
-	 *
-	 * @param array|string $headers
-	 * @return array { email: string, name: string }
-	 */
-	public function get_resolved_from( $headers = array() ) {
-		return $this->resolve_from( $headers );
+		return false !== stripos( (string) $filtered, 'text/html' );
 	}
 
 	/**
 	 * Resolve the sender (From) for an outgoing message.
 	 *
 	 * Order of precedence, matching what WordPress core's PHPMailer path does:
-	 *   1. A connector-forced From email (e.g. Generic "Sender Address
-	 *      Compatibility") always wins for the email, falling back to the
-	 *      header/filter name.
-	 *   2. An explicit From: header on the message. PMPro sets its configured
+	 *   1. An explicit From: header on the message. PMPro sets its configured
 	 *      sender as a real From: header (PMProEmail::add_from_to_headers()),
 	 *      and WordPress core honours From: headers, so API connectors must too.
-	 *   3. The wp_mail_from / wp_mail_from_name filters, seeded with the SAME
+	 *   2. The wp_mail_from / wp_mail_from_name filters, seeded with the SAME
 	 *      default WordPress core uses ('wordpress@<sitename>' / 'WordPress')
 	 *      so PMPro's pmpro_wp_mail_from() override actually fires.
 	 *
 	 * @param array|string $headers Raw message headers (string or array).
 	 * @return array { email: string, name: string }
 	 */
-	protected function resolve_from( $headers = array() ) {
-		// NOTE: get_forced_from_email() only returns non-empty for the Generic
-		// connector, which sends via configure_phpmailer() on the phpmailer_init
-		// path and never reaches resolve_from()/get_from_email(). The API
-		// connectors all inherit the base '' implementation, so the forced-from
-		// branches below are effectively unreachable for shipped connectors today.
-		// They are retained as defensive support for any future connector that
-		// both overrides get_forced_from_email() and sends via the API path.
-		$forced_from_email = $this->get_forced_from_email();
-
+	public function resolve_from( $headers = array() ) {
 		$parsed = $this->parse_headers( $headers );
 		if ( ! empty( $parsed['from'] ) ) {
 			$from = $this->parse_recipient( $parsed['from'] );
 			return array(
-				'email' => ! empty( $forced_from_email ) ? $forced_from_email : $from['email'],
+				'email' => $from['email'],
 				'name'  => $from['name'],
 			);
 		}
 
 		return array(
-			'email' => ! empty( $forced_from_email ) ? $forced_from_email : $this->get_from_email(),
-			'name'  => $this->get_from_name(),
+			'email' => apply_filters( 'wp_mail_from', self::default_from_email() ),
+			'name'  => apply_filters( 'wp_mail_from_name', 'WordPress' ),
 		);
 	}
 
 	/**
-	 * Get the "from" email address, respecting the wp_mail_from filter.
-	 *
-	 * The filter is seeded with the same default WordPress core uses
-	 * ('wordpress@<sitename>') so plugins like PMPro that only substitute their
-	 * configured sender when they see that default value will fire correctly.
-	 *
-	 * @return string
-	 */
-	protected function get_from_email() {
-		$forced_from_email = $this->get_forced_from_email();
-		if ( ! empty( $forced_from_email ) ) {
-			return $forced_from_email;
-		}
-
-		return apply_filters( 'wp_mail_from', $this->get_default_from_email() );
-	}
-
-	/**
-	 * Get the "from" name, respecting the wp_mail_from_name filter.
-	 *
-	 * Seeded with WordPress core's default ('WordPress') for the same reason as
-	 * get_from_email().
-	 *
-	 * @return string
-	 */
-	protected function get_from_name() {
-		return apply_filters( 'wp_mail_from_name', 'WordPress' );
-	}
-
-	/**
-	 * Build the default From email address used to seed the wp_mail_from filter.
-	 *
-	 * This value matters because plugins that override the sender only do so when
-	 * they see their OWN expected default on the filter. WordPress core derives its
-	 * default from network_home_url() (wp-includes/pluggable.php), but PMPro's
-	 * pmpro_wp_mail_from() (paid-memberships-pro/includes/email.php) derives it from
-	 * strtolower( $_SERVER['SERVER_NAME'] ), falling back to the lowercased siteurl
-	 * host, with any leading 'www.' stripped, and only substitutes the configured
-	 * pmpro_from_email when the seeded value EXACTLY equals that.
-	 *
-	 * To keep the configured PMPro sender actually applying for API connectors, we
-	 * mirror PMPro's derivation when PMPro is active (so the exact-match guard
-	 * cannot miss on hosts where SERVER_NAME differs from the home host, or where
-	 * the home host contains uppercase), and otherwise mirror WordPress core. In
-	 * both cases the host is lowercased, matching the comparisons both perform.
-	 *
-	 * Limitation: if the seeded value still does not equal what PMPro computes (an
-	 * inherent PMPro-side quirk that also affects the PHPMailer path), PMPro's
-	 * substitution will not fire and mail goes from 'wordpress@<host>'. We minimise
-	 * that window here but cannot eliminate it without coupling to PMPro internals.
+	 * Build the default From email address used to seed the wp_mail_from filter,
+	 * matching WordPress core's default in wp-includes/pluggable.php
+	 * ('wordpress@<sitename>'). Plugins like PMPro that override the sender only do
+	 * so when they see this default on the filter.
 	 *
 	 * @return string
 	 */
 	public static function default_from_email() {
-		$sitename = '';
-
-		// When PMPro is active, derive the host exactly as pmpro_wp_mail_from()
-		// does so PMPro's wp_mail_from substitution reliably triggers.
-		if ( defined( 'PMPRO_VERSION' ) && isset( $_SERVER['SERVER_NAME'] ) ) {
-			$sitename = strtolower( sanitize_text_field( wp_unslash( $_SERVER['SERVER_NAME'] ) ) );
-		}
-
-		if ( '' === $sitename ) {
-			$host = wp_parse_url( network_home_url(), PHP_URL_HOST );
-			if ( is_string( $host ) && '' !== $host ) {
-				$sitename = strtolower( $host );
-			}
-		}
-
-		if ( '' === $sitename ) {
-			$sitename = 'localhost.localdomain';
-		}
-
+		$sitename = strtolower( (string) wp_parse_url( network_home_url(), PHP_URL_HOST ) );
 		if ( 0 === strpos( $sitename, 'www.' ) ) {
 			$sitename = substr( $sitename, 4 );
 		}
@@ -257,39 +146,31 @@ abstract class PMPRO_SMTP_Connector_Base {
 	}
 
 	/**
-	 * Instance accessor for the default From email (kept for back-compat with
-	 * subclasses/callers that invoke it on an instance).
+	 * Read the message attachments into { filename, contents, type } parts.
 	 *
-	 * @return string
-	 */
-	protected function get_default_from_email() {
-		return self::default_from_email();
-	}
-
-	/**
-	 * Get the MIME type for a file, guarded for hosts without the fileinfo
-	 * extension (mime_content_type()).
+	 * Each connector maps these parts to its own attachment shape (base64 for the
+	 * JSON connectors, raw bytes for Mailgun's multipart upload).
 	 *
-	 * @param string $file Absolute path to the file.
-	 * @return string MIME type, or 'application/octet-stream' as a safe default.
+	 * @param array $atts Email attributes.
+	 * @return array[] Each part { filename: string, contents: string, type: string }.
 	 */
-	protected function get_mime_type( $file ) {
-		if ( function_exists( 'mime_content_type' ) ) {
-			$type = mime_content_type( $file );
-			if ( ! empty( $type ) ) {
-				return $type;
-			}
+	protected function read_attachments( array $atts ) {
+		$parts = array();
+		if ( empty( $atts['attachments'] ) ) {
+			return $parts;
 		}
-		return 'application/octet-stream';
-	}
-
-	/**
-	 * Allow connectors to override the sender email for strict SMTP servers.
-	 *
-	 * @return string
-	 */
-	protected function get_forced_from_email() {
-		return '';
+		foreach ( (array) $atts['attachments'] as $file ) {
+			if ( ! file_exists( $file ) ) {
+				continue;
+			}
+			$type = function_exists( 'mime_content_type' ) ? mime_content_type( $file ) : '';
+			$parts[] = array(
+				'filename' => basename( $file ),
+				'contents' => file_get_contents( $file ),
+				'type'     => ! empty( $type ) ? $type : 'application/octet-stream',
+			);
+		}
+		return $parts;
 	}
 
 	/**
@@ -375,19 +256,6 @@ abstract class PMPRO_SMTP_Connector_Base {
 			$char = $value[ $i ];
 
 			if ( '"' === $char ) {
-				// Respect a backslash-escaped quote inside a quoted string. Count
-				// the run of preceding backslashes: an odd count escapes this
-				// quote, an even count (e.g. an escaped backslash \\") does not.
-				if ( $in_quotes ) {
-					$backslashes = 0;
-					for ( $j = $i - 1; $j >= 0 && '\\' === $value[ $j ]; $j-- ) {
-						$backslashes++;
-					}
-					if ( 1 === ( $backslashes % 2 ) ) {
-						$current .= $char;
-						continue;
-					}
-				}
 				$in_quotes = ! $in_quotes;
 				$current  .= $char;
 				continue;
@@ -416,20 +284,6 @@ abstract class PMPRO_SMTP_Connector_Base {
 	}
 
 	/**
-	 * Parse a comma-separated header value into an array of { name, email } entries.
-	 *
-	 * @param string $value
-	 * @return array[] Array of arrays each with 'name' and 'email' keys.
-	 */
-	protected function parse_recipient_list( $value ) {
-		$parsed = array();
-		foreach ( $this->split_address_list( $value ) as $address ) {
-			$parsed[] = $this->parse_recipient( $address );
-		}
-		return $parsed;
-	}
-
-	/**
 	 * Build an array of { email, name } objects from a comma-separated address
 	 * list, for JSON API connectors (SendGrid/Brevo/MailerSend cc/bcc shape).
 	 *
@@ -438,7 +292,8 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 */
 	protected function build_address_objects( $value ) {
 		$objects = array();
-		foreach ( $this->parse_recipient_list( $value ) as $recipient ) {
+		foreach ( $this->split_address_list( $value ) as $address ) {
+			$recipient = $this->parse_recipient( $address );
 			if ( empty( $recipient['email'] ) ) {
 				continue;
 			}
@@ -449,6 +304,125 @@ abstract class PMPRO_SMTP_Connector_Base {
 			$objects[] = $entry;
 		}
 		return $objects;
+	}
+
+	/**
+	 * Build an array of { email, name? } objects from a $to value (string or
+	 * array), for JSON API connectors that build per-recipient objects.
+	 *
+	 * @param string|array $to
+	 * @return array[]
+	 */
+	protected function build_recipient_objects( $to ) {
+		$objects = array();
+		foreach ( $this->normalize_recipients( $to ) as $recipient ) {
+			$parsed = $this->parse_recipient( $recipient );
+			$entry  = array( 'email' => $parsed['email'] );
+			if ( ! empty( $parsed['name'] ) ) {
+				$entry['name'] = $parsed['name'];
+			}
+			$objects[] = $entry;
+		}
+		return $objects;
+	}
+
+	/**
+	 * Resolve the From into a "Name <email>" (or bare email) string, for
+	 * connectors that send the sender as a single combined string.
+	 *
+	 * @param array $atts Email attributes.
+	 * @return string
+	 */
+	protected function format_from( array $atts ) {
+		$sender = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
+		return ! empty( $sender['name'] ) ? sprintf( '%s <%s>', $sender['name'], $sender['email'] ) : $sender['email'];
+	}
+
+	/**
+	 * POST a JSON body to a provider API and resolve the response.
+	 *
+	 * The JSON connectors all send the same request shape (JSON body, 15s timeout)
+	 * and differ only in URL, auth/content headers, provider label, and the path to
+	 * the error message in the response.
+	 *
+	 * @param string $url        Endpoint URL.
+	 * @param array  $headers    Request headers.
+	 * @param array  $body       Body to JSON-encode.
+	 * @param string $label      Human-readable provider name.
+	 * @param array  $error_keys Path into the decoded JSON to the error message.
+	 * @return true|WP_Error
+	 */
+	protected function post_json( $url, array $headers, array $body, $label, array $error_keys ) {
+		$response = wp_safe_remote_post( $url, array(
+			'headers' => $headers,
+			'body'    => wp_json_encode( $body ),
+			'timeout' => 15,
+		) );
+
+		return $this->handle_api_response( $response, $label, $error_keys );
+	}
+
+	/**
+	 * Validate an API response and return true on success or a WP_Error on failure.
+	 *
+	 * @param array|WP_Error $response   Result from wp_safe_remote_post().
+	 * @param string         $label      Human-readable provider name.
+	 * @param array          $error_keys Path into the decoded JSON to the error message.
+	 * @return true|WP_Error
+	 */
+	protected function handle_api_response( $response, $label, array $error_keys ) {
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		if ( $code >= 200 && $code <= 299 ) {
+			return true;
+		}
+
+		$body_response = wp_remote_retrieve_body( $response );
+		$decoded       = json_decode( $body_response, true );
+		$value         = $decoded;
+		foreach ( $error_keys as $key ) {
+			if ( is_array( $value ) && isset( $value[ $key ] ) ) {
+				$value = $value[ $key ];
+			} else {
+				$value = '';
+				break;
+			}
+		}
+		$message = ! empty( $value ) ? $value : $body_response;
+
+		return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
+			/* translators: 1: HTTP response code, 2: error message from the provider */
+			__( '%1$s error (%2$d): %3$s', 'pmpro-smtp' ),
+			$label,
+			$code,
+			$message
+		) );
+	}
+
+	/**
+	 * Build base64-encoded attachment parts keyed for a JSON connector.
+	 *
+	 * The five JSON connectors all base64-encode each attachment and differ only
+	 * in the array keys they use. $keys maps part fields (filename, contents, type)
+	 * to the connector's key names; omit a field to leave it out of the output.
+	 *
+	 * @param array $atts Email attributes.
+	 * @param array $keys Map of part field => output key (e.g. array( 'filename' => 'name', 'contents' => 'content' )).
+	 * @return array[]
+	 */
+	protected function build_base64_attachments( array $atts, array $keys ) {
+		$attachments = array();
+		foreach ( $this->read_attachments( $atts ) as $part ) {
+			$entry = array();
+			foreach ( $keys as $field => $out ) {
+				$entry[ $out ] = ( 'contents' === $field ) ? base64_encode( $part['contents'] ) : $part[ $field ];
+			}
+			$attachments[] = $entry;
+		}
+		return $attachments;
 	}
 
 	/**

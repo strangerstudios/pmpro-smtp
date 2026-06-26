@@ -173,7 +173,7 @@ function pmpro_smtp_ajax_send_test() {
 		'attachments' => array(),
 	);
 
-	pmpro_smtp_begin_debug_capture();
+	pmpro_smtp_debug_data( array( 'active' => true ) );
 
 	// Exclude this diagnostic test send from PMPro's email log. Without this,
 	// PMPro's wp_mail_succeeded / wp_mail_failed handlers record every admin
@@ -193,13 +193,14 @@ function pmpro_smtp_ajax_send_test() {
 	remove_filter( 'pmpro_should_log_email', 'pmpro_smtp_exclude_test_from_log', 99 );
 	unset( $GLOBALS['pmpro_smtp_sending_test'] );
 
-	$debug = pmpro_smtp_end_debug_capture();
+	$debug = pmpro_smtp_debug_data();
+	pmpro_smtp_debug_data( false );
 
 	// Resolve the From address the same way a real send would, so the admin can
 	// confirm production mail will use the expected sender. The test payload has
 	// no From: header, so this reflects the no-header fallback (the WP/PMPro
 	// configured sender) that most PMPro emails ultimately resolve against.
-	$resolved_from = $connector->get_resolved_from( $atts['headers'] );
+	$resolved_from = $connector->resolve_from( $atts['headers'] );
 	$from_display  = ! empty( $resolved_from['name'] )
 		? sprintf( '%s <%s>', $resolved_from['name'], $resolved_from['email'] )
 		: $resolved_from['email'];
@@ -210,11 +211,7 @@ function pmpro_smtp_ajax_send_test() {
 
 	if ( ! $result ) {
 		$message = ! empty( $debug['error'] ) ? $debug['error'] : __( 'WordPress could not send the test email.', 'pmpro-smtp' );
-		$details = array();
-
-		if ( ! empty( $debug['log'] ) ) {
-			$details[] = implode( "\n", $debug['log'] );
-		}
+		$details = ! empty( $debug['log'] ) ? implode( "\n", $debug['log'] ) : '';
 
 		$hint = '';
 		if ( 'generic' === $connector->get_name() ) {
@@ -231,7 +228,7 @@ function pmpro_smtp_ajax_send_test() {
 		wp_send_json_error(
 			array(
 				'message' => $message,
-				'details' => implode( "\n\n", array_filter( $details ) ),
+				'details' => $details,
 				'hint'    => $hint,
 			)
 		);

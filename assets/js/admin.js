@@ -95,32 +95,4 @@
 		} );
 	} );
 
-	// =========================================================================
-	// PMPro collapsible sections (if not already handled by PMPro core)
-	// =========================================================================
-
-	if ( typeof window.pmpro !== 'undefined' && typeof window.pmpro.initSections === 'function' ) {
-		// PMPro core handles it.
-		return;
-	}
-
-	$( document ).on( 'click', '.pmpro_section-toggle-button', function() {
-		var $section = $( this ).closest( '.pmpro_section' );
-		var $inside  = $section.find( '.pmpro_section_inside' );
-		var $icon    = $( this ).find( '.dashicons' );
-		var isOpen   = $section.data( 'visibility' ) === 'shown';
-
-		if ( isOpen ) {
-			$inside.slideUp( 200 );
-			$section.data( 'visibility', 'hidden' );
-			$icon.removeClass( 'dashicons-arrow-up-alt2' ).addClass( 'dashicons-arrow-down-alt2' );
-			$( this ).attr( 'aria-expanded', 'false' );
-		} else {
-			$inside.slideDown( 200 );
-			$section.data( 'visibility', 'shown' );
-			$icon.removeClass( 'dashicons-arrow-down-alt2' ).addClass( 'dashicons-arrow-up-alt2' );
-			$( this ).attr( 'aria-expanded', 'true' );
-		}
-	} );
-
 } )( jQuery );

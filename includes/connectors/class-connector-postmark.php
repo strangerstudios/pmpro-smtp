@@ -32,23 +32,19 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'Server Token', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Find your Server Token in the Postmark dashboard under your Server > API Tokens. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Find your Server Token in the Postmark dashboard under your Server > API Tokens.', 'pmpro-smtp' ),
 			),
 		);
 	}
 
-	protected function do_send( array $atts ) {
-		$server_token = pmpro_smtp_decrypt( $this->get_setting( 'server_token' ) );
+	public function send( array $atts ) {
+		$server_token = $this->get_setting( 'server_token' );
 
 		if ( empty( $server_token ) ) {
 			return new WP_Error( 'pmpro_smtp_missing_token', __( 'Postmark server token is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$from_email = $sender['email'];
-		$from_name  = $sender['name'];
-		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
-
+		$from    = $this->format_from( $atts );
 		$to      = implode( ', ', $this->normalize_recipients( $atts['to'] ) );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
 		$is_html = $this->is_html_message( $headers );
@@ -75,53 +71,15 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 			$body['ReplyTo'] = $headers['reply-to'];
 		}
 
-		if ( ! empty( $atts['attachments'] ) ) {
-			$attachments = array();
-			foreach ( (array) $atts['attachments'] as $file ) {
-				if ( file_exists( $file ) ) {
-					$contents = file_get_contents( $file );
-					if ( false === $contents ) {
-						continue;
-					}
-					$attachments[] = array(
-						'Name'        => basename( $file ),
-						'Content'     => base64_encode( $contents ),
-						'ContentType' => $this->get_mime_type( $file ),
-					);
-				}
-			}
-			if ( ! empty( $attachments ) ) {
-				$body['Attachments'] = $attachments;
-			}
+		$attachments = $this->build_base64_attachments( $atts, array( 'filename' => 'Name', 'contents' => 'Content', 'type' => 'ContentType' ) );
+		if ( ! empty( $attachments ) ) {
+			$body['Attachments'] = $attachments;
 		}
 
-		$response = wp_safe_remote_post( self::API_URL, array(
-			'headers' => array(
-				'Accept'                  => 'application/json',
-				'Content-Type'            => 'application/json',
-				'X-Postmark-Server-Token' => $server_token,
-			),
-			'body'    => wp_json_encode( $body ),
-			'timeout' => 15,
-		) );
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code > 299 ) {
-			$body_response = wp_remote_retrieve_body( $response );
-			$decoded       = json_decode( $body_response, true );
-			$message       = ! empty( $decoded['Message'] ) ? $decoded['Message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
-				/* translators: 1: HTTP response code, 2: error message from Postmark */
-				__( 'Postmark error (%1$d): %2$s', 'pmpro-smtp' ),
-				$code,
-				$message
-			) );
-		}
-
-		return true;
+		return $this->post_json( self::API_URL, array(
+			'Accept'                  => 'application/json',
+			'Content-Type'            => 'application/json',
+			'X-Postmark-Server-Token' => $server_token,
+		), $body, 'Postmark', array( 'Message' ) );
 	}
 }

@@ -2,8 +2,8 @@
 /**
  * Uninstall handler for Paid Memberships Pro - SMTP.
  *
- * Removes all plugin options, including encrypted credentials, when the plugin
- * is deleted from the WordPress admin.
+ * Removes all plugin options, including stored credentials, when the plugin is
+ * deleted from the WordPress admin.
  *
  * @package PMProSMTP
  */
@@ -42,10 +42,6 @@ function pmpro_smtp_delete_site_options( $connector_keys ) {
 	foreach ( $connector_keys as $key ) {
 		delete_option( 'pmpro_smtp_connector_' . $key );
 	}
-
-	// The encrypt-unavailable notice is a per-user, 60-second transient
-	// (pmpro_smtp_encrypt_unavailable_<user_id>); it self-expires long before
-	// uninstall, so there is nothing durable to clean up here.
 }
 
 if ( is_multisite() ) {

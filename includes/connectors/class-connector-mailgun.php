@@ -40,7 +40,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'API Key', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Find your API key in the Mailgun dashboard under API Keys. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Find your API key in the Mailgun dashboard under API Keys.', 'pmpro-smtp' ),
 			),
 			array(
 				'key'         => 'domain',
@@ -52,8 +52,8 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		);
 	}
 
-	protected function do_send( array $atts ) {
-		$api_key = pmpro_smtp_decrypt( $this->get_setting( 'api_key' ) );
+	public function send( array $atts ) {
+		$api_key = $this->get_setting( 'api_key' );
 		$domain  = $this->get_setting( 'domain' );
 		$region  = $this->get_setting( 'region', 'us' );
 
@@ -67,11 +67,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		$base_url = ( 'eu' === $region ) ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
 		$api_url  = $base_url . '/v3/' . $domain . '/messages';
 
-		$sender     = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$from_email = $sender['email'];
-		$from_name  = $sender['name'];
-		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
-
+		$from    = $this->format_from( $atts );
 		$to      = implode( ', ', $this->normalize_recipients( $atts['to'] ) );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
 		$is_html = $this->is_html_message( $headers );
@@ -98,22 +94,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 			$body['h:Reply-To'] = $headers['reply-to'];
 		}
 
-		$files = array();
-		if ( ! empty( $atts['attachments'] ) ) {
-			foreach ( (array) $atts['attachments'] as $file ) {
-				if ( file_exists( $file ) ) {
-					$contents = file_get_contents( $file );
-					if ( false === $contents ) {
-						continue;
-					}
-					$files[] = array(
-						'filename' => basename( $file ),
-						'type'     => $this->get_mime_type( $file ),
-						'contents' => $contents,
-					);
-				}
-			}
-		}
+		$files = $this->read_attachments( $atts );
 
 		$request_headers = array(
 			'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ),
@@ -137,24 +118,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 			'timeout' => 15,
 		) );
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code > 299 ) {
-			$body_response = wp_remote_retrieve_body( $response );
-			$decoded       = json_decode( $body_response, true );
-			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf(
-				/* translators: 1: HTTP response code, 2: error message from Mailgun */
-				__( 'Mailgun error (%1$d): %2$s', 'pmpro-smtp' ),
-				$code,
-				$message
-			) );
-		}
-
-		return true;
+		return $this->handle_api_response( $response, 'Mailgun', array( 'message' ) );
 	}
 
 	/**
@@ -171,11 +135,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 
 		foreach ( $fields as $name => $value ) {
 			$name = str_replace( array( "\r", "\n", '"' ), '', (string) $name );
-			// Strip CR/LF from the value too. On the pre_wp_mail short-circuit path
-			// WordPress core never runs its usual subject/header CRLF sanitization,
-			// so a value containing a CRLF + "--<boundary>" could otherwise inject an
-			// additional MIME part into the Mailgun request. Mirrors the filename/
-			// name handling above. (Double-quotes are legal in a form-data value.)
+			// Strip CR/LF to prevent MIME part injection (double-quotes are legal here).
 			$value = str_replace( array( "\r", "\n" ), '', (string) $value );
 			$data .= '--' . $boundary . $eol;
 			$data .= 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol;
@@ -183,8 +143,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		}
 
 		foreach ( $files as $file ) {
-			// Strip CR/LF and double-quotes from the filename so it cannot break
-			// out of the filename token and inject additional MIME part headers.
+			// Strip CR/LF and double-quotes from the filename to prevent MIME header injection.
 			$filename = str_replace( array( "\r", "\n", '"' ), '', (string) $file['filename'] );
 			$type     = str_replace( array( "\r", "\n", '"' ), '', (string) $file['type'] );
 			$data    .= '--' . $boundary . $eol;
