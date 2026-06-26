@@ -1,6 +1,6 @@
 <?php
 /**
- * Core functions: connector registry, mail interception, encryption.
+ * Core functions: connector registry and mail interception.
  *
  * From name/email settings and email logging are handled by PMPro core.
  *
@@ -56,17 +56,6 @@ function pmpro_smtp_get_active_connector() {
 	return ( ! empty( $active ) && isset( $connectors[ $active ] ) ) ? $connectors[ $active ] : null;
 }
 
-/**
- * Get the backup connector, or null if none is configured.
- *
- * @return PMPRO_SMTP_Connector_Base|null
- */
-function pmpro_smtp_get_backup_connector() {
-	$backup     = get_option( 'pmpro_smtp_backup_connector', '' );
-	$connectors = pmpro_smtp_get_connectors();
-	return ( ! empty( $backup ) && isset( $connectors[ $backup ] ) ) ? $connectors[ $backup ] : null;
-}
-
 // ============================================================================
 // Mail interception
 // ============================================================================
@@ -83,15 +72,24 @@ function pmpro_smtp_get_backup_connector() {
  * (because we short-circuit), but PMPro hooks those same actions so our
  * connector success/failure is transparent to PMPro's log.
  *
+ * Inline embeds ($atts['embeds'], added in WordPress 6.9) are not mapped to the
+ * API providers' CID/inline-attachment mechanisms, so emails relying on inline
+ * embedded images are best sent through the Generic/PHPMailer connector, which
+ * runs through WordPress core and handles embeds natively.
+ *
  * @param null|bool $return Non-null short-circuits wp_mail().
- * @param array     $atts   { to, subject, message, headers, attachments }
+ * @param array     $atts   { to, subject, message, headers, attachments, embeds }
  * @return null|bool
  */
 function pmpro_smtp_pre_wp_mail( $return, $atts ) {
-	// Sandbox mode: short-circuit without sending.
+	// Sandbox: discard without firing wp_mail_succeeded; clear PMPro's stash so it does not linger.
 	if ( pmpro_smtp_is_test_mode() ) {
-		pmpro_smtp_stash_from_data();
-		do_action( 'wp_mail_succeeded', $atts );
+		if ( function_exists( 'pmpro_stashed_mail_data' ) ) {
+			pmpro_stashed_mail_data( false );
+		}
+		if ( function_exists( 'pmpro_stashed_from_data' ) ) {
+			pmpro_stashed_from_data( false );
+		}
 		return true;
 	}
 
@@ -107,9 +105,10 @@ function pmpro_smtp_pre_wp_mail( $return, $atts ) {
 
 	// Try backup connector on failure.
 	if ( is_wp_error( $result ) ) {
-		$backup = pmpro_smtp_get_backup_connector();
-		if ( $backup && 'generic' !== $backup->get_name() ) {
-			$result = $backup->send( $atts );
+		$backup_slug = get_option( 'pmpro_smtp_backup_connector', '' );
+		$connectors  = pmpro_smtp_get_connectors();
+		if ( ! empty( $backup_slug ) && isset( $connectors[ $backup_slug ] ) && 'generic' !== $backup_slug ) {
+			$result = $connectors[ $backup_slug ]->send( $atts );
 		}
 	}
 
@@ -173,10 +172,14 @@ function pmpro_smtp_stash_from_data() {
 		return;
 	}
 
+	// Seed the filters with the same default WordPress core uses
+	// ('wordpress@<sitename>' / 'WordPress') so PMPro's wp_mail_from override,
+	// which only substitutes its configured sender on that exact default, fires
+	// here too — matching the address API connectors actually send from.
 	pmpro_stashed_from_data(
 		array(
-			'from'      => apply_filters( 'wp_mail_from', get_option( 'admin_email' ) ),
-			'from_name' => apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) ),
+			'from'      => apply_filters( 'wp_mail_from', PMPRO_SMTP_Connector_Base::default_from_email() ),
+			'from_name' => apply_filters( 'wp_mail_from_name', 'WordPress' ),
 		)
 	);
 }
@@ -188,53 +191,20 @@ function pmpro_smtp_stash_from_data() {
  * @return array
  */
 function pmpro_smtp_debug_data( $set = null ) {
-	static $data = array(
-		'active'    => false,
-		'log'       => array(),
-		'error'     => '',
-		'exception' => '',
+	$default = array(
+		'active' => false,
+		'log'    => array(),
+		'error'  => '',
 	);
-
-	if ( null !== $set ) {
-		if ( false === $set ) {
-			$data = array(
-				'active'    => false,
-				'log'       => array(),
-				'error'     => '',
-				'exception' => '',
-			);
-		} else {
-			$data = array_merge( $data, $set );
-		}
+	static $data = null;
+	if ( null === $data ) {
+		$data = $default;
 	}
 
-	return $data;
-}
+	if ( null !== $set ) {
+		$data = ( false === $set ) ? $default : array_merge( $data, $set );
+	}
 
-/**
- * Begin collecting SMTP debug information for a test email request.
- *
- * @return void
- */
-function pmpro_smtp_begin_debug_capture() {
-	pmpro_smtp_debug_data(
-		array(
-			'active'    => true,
-			'log'       => array(),
-			'error'     => '',
-			'exception' => '',
-		)
-	);
-}
-
-/**
- * Stop collecting SMTP debug information.
- *
- * @return array
- */
-function pmpro_smtp_end_debug_capture() {
-	$data = pmpro_smtp_debug_data();
-	pmpro_smtp_debug_data( false );
 	return $data;
 }
 
@@ -267,99 +237,16 @@ function pmpro_smtp_capture_phpmailer_debug( $phpmailer ) {
 		return;
 	}
 
+	// DEBUG_SERVER (level 2) records the server side of the handshake, which is
+	// enough to diagnose connection/TLS/auth-rejection failures without emitting
+	// the client AUTH lines that carry credentials (those only appear at
+	// DEBUG_CLIENT, level 3+).
 	$phpmailer->SMTPDebug = 2;
 	$phpmailer->Debugoutput = static function( $message, $level ) {
 		$data = pmpro_smtp_debug_data();
-		if ( empty( $data['active'] ) ) {
-			return;
-		}
-
 		$data['log'][] = sprintf( '[%s] %s', $level, trim( $message ) );
 		pmpro_smtp_debug_data( $data );
 	};
 }
 add_action( 'phpmailer_init', 'pmpro_smtp_capture_phpmailer_debug', 5 );
 
-/**
- * Tell PMPro Hosting not to force its fallback SMTP transport when this plugin
- * is actively configured.
- *
- * PMPro Hosting uses local SMTP by default on hosted production sites. When a
- * third-party mailer plugin is configured, we want PMPro Hosting to stand down
- * so only one transport handles the message.
- *
- * @param bool $detected Whether a third-party mailer has already been detected.
- * @return bool
- */
-function pmpro_smtp_mark_as_third_party_mailer( $detected ) {
-	if ( $detected ) {
-		return true;
-	}
-
-	return null !== pmpro_smtp_get_active_connector();
-}
-add_filter( 'pmpro_hosting_has_third_party_mailer', 'pmpro_smtp_mark_as_third_party_mailer' );
-
-// ============================================================================
-// Encryption
-// ============================================================================
-
-/**
- * Encrypt a sensitive string for database storage.
- *
- * Uses AES-256-CBC with a key derived from WordPress's auth salts.
- *
- * @param string $value Plain text value.
- * @return string Base64-encoded encrypted value, or empty string.
- */
-function pmpro_smtp_encrypt( $value ) {
-	if ( '' === $value || false === $value ) {
-		return '';
-	}
-
-	if ( ! function_exists( 'openssl_encrypt' ) ) {
-		return $value;
-	}
-
-	$key    = substr( hash( 'sha256', wp_salt( 'auth' ) . wp_salt( 'secure_auth' ) ), 0, 32 );
-	$iv_len = openssl_cipher_iv_length( 'AES-256-CBC' );
-	$iv     = openssl_random_pseudo_bytes( $iv_len );
-
-	$encrypted = openssl_encrypt( $value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
-
-	if ( false === $encrypted ) {
-		return $value;
-	}
-
-	return base64_encode( $iv . $encrypted );
-}
-
-/**
- * Decrypt a value encrypted with pmpro_smtp_encrypt().
- *
- * @param string $value Encrypted value.
- * @return string Plain text, or the original value if decryption fails.
- */
-function pmpro_smtp_decrypt( $value ) {
-	if ( empty( $value ) ) {
-		return '';
-	}
-
-	if ( ! function_exists( 'openssl_decrypt' ) ) {
-		return $value;
-	}
-
-	$key     = substr( hash( 'sha256', wp_salt( 'auth' ) . wp_salt( 'secure_auth' ) ), 0, 32 );
-	$iv_len  = openssl_cipher_iv_length( 'AES-256-CBC' );
-	$decoded = base64_decode( $value, true );
-
-	if ( false === $decoded || strlen( $decoded ) <= $iv_len ) {
-		return $value; // Not encrypted — stored as plain text before encryption was added.
-	}
-
-	$iv        = substr( $decoded, 0, $iv_len );
-	$encrypted = substr( $decoded, $iv_len );
-	$decrypted = openssl_decrypt( $encrypted, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
-
-	return ( false === $decrypted ) ? $value : $decrypted;
-}

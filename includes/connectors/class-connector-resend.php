@@ -32,25 +32,22 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'API Key', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Create an API key in your Resend dashboard under API Keys. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Create an API key in your Resend dashboard under API Keys.', 'pmpro-smtp' ),
 			),
 		);
 	}
 
-	protected function do_send( array $atts ) {
-		$api_key = pmpro_smtp_decrypt( $this->get_setting( 'api_key' ) );
+	public function send( array $atts ) {
+		$api_key = $this->get_setting( 'api_key' );
 
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'pmpro_smtp_missing_api_key', __( 'Resend API key is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
-		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
-
-		$to      = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
+		$from    = $this->format_from( $atts );
+		$to      = $this->normalize_recipients( $atts['to'] );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'from'    => $from,
@@ -64,52 +61,26 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 			$body['text'] = $atts['message'];
 		}
 
-		if ( ! empty( $headers['cc'] ) ) {
-			$body['cc'] = array( $headers['cc'] );
+		$cc = $this->split_address_list( isset( $headers['cc'] ) ? $headers['cc'] : '' );
+		if ( ! empty( $cc ) ) {
+			$body['cc'] = $cc;
 		}
-		if ( ! empty( $headers['bcc'] ) ) {
-			$body['bcc'] = array( $headers['bcc'] );
+		$bcc = $this->split_address_list( isset( $headers['bcc'] ) ? $headers['bcc'] : '' );
+		if ( ! empty( $bcc ) ) {
+			$body['bcc'] = $bcc;
 		}
 		if ( ! empty( $headers['reply-to'] ) ) {
-			$body['reply_to'] = array( $headers['reply-to'] );
+			$body['reply_to'] = $this->split_address_list( $headers['reply-to'] );
 		}
 
-		if ( ! empty( $atts['attachments'] ) ) {
-			$attachments = array();
-			foreach ( (array) $atts['attachments'] as $file ) {
-				if ( file_exists( $file ) ) {
-					$attachments[] = array(
-						'filename' => basename( $file ),
-						'content'  => base64_encode( file_get_contents( $file ) ),
-					);
-				}
-			}
-			if ( ! empty( $attachments ) ) {
-				$body['attachments'] = $attachments;
-			}
+		$attachments = $this->build_base64_attachments( $atts, array( 'filename' => 'filename', 'contents' => 'content' ) );
+		if ( ! empty( $attachments ) ) {
+			$body['attachments'] = $attachments;
 		}
 
-		$response = wp_safe_remote_post( self::API_URL, array(
-			'headers' => array(
-				'Authorization' => 'Bearer ' . $api_key,
-				'Content-Type'  => 'application/json',
-			),
-			'body'    => wp_json_encode( $body ),
-			'timeout' => 15,
-		) );
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code > 299 ) {
-			$body_response = wp_remote_retrieve_body( $response );
-			$decoded       = json_decode( $body_response, true );
-			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Resend error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
-		}
-
-		return true;
+		return $this->post_json( self::API_URL, array(
+			'Authorization' => 'Bearer ' . $api_key,
+			'Content-Type'  => 'application/json',
+		), $body, 'Resend', array( 'message' ) );
 	}
 }

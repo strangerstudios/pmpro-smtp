@@ -32,39 +32,29 @@ class PMPRO_SMTP_Connector_Brevo extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'API Key', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Find your API key in the Brevo dashboard under SMTP & API > API Keys. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Find your API key in the Brevo dashboard under SMTP & API > API Keys.', 'pmpro-smtp' ),
 			),
 		);
 	}
 
-	protected function do_send( array $atts ) {
-		$api_key = pmpro_smtp_decrypt( $this->get_setting( 'api_key' ) );
+	public function send( array $atts ) {
+		$api_key = $this->get_setting( 'api_key' );
 
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'pmpro_smtp_missing_api_key', __( 'Brevo API key is not configured.', 'pmpro-smtp' ) );
 		}
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
+		$sender = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
 
-		$to_parsed = array();
-		$to        = is_array( $atts['to'] ) ? $atts['to'] : array( $atts['to'] );
-		foreach ( $to as $recipient ) {
-			$parsed   = $this->parse_recipient( $recipient );
-			$to_entry = array( 'email' => $parsed['email'] );
-			if ( ! empty( $parsed['name'] ) ) {
-				$to_entry['name'] = $parsed['name'];
-			}
-			$to_parsed[] = $to_entry;
-		}
+		$to_parsed = $this->build_recipient_objects( $atts['to'] );
 
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'sender'  => array_filter( array(
-				'email' => $from_email,
-				'name'  => $from_name,
+				'email' => $sender['email'],
+				'name'  => $sender['name'],
 			) ),
 			'to'      => $to_parsed,
 			'subject' => $atts['subject'],
@@ -76,53 +66,30 @@ class PMPRO_SMTP_Connector_Brevo extends PMPRO_SMTP_Connector_Base {
 			$body['textContent'] = $atts['message'];
 		}
 
-		if ( ! empty( $headers['cc'] ) ) {
-			$body['cc'] = array( array( 'email' => $headers['cc'] ) );
+		$cc = $this->build_address_objects( isset( $headers['cc'] ) ? $headers['cc'] : '' );
+		if ( ! empty( $cc ) ) {
+			$body['cc'] = $cc;
 		}
-		if ( ! empty( $headers['bcc'] ) ) {
-			$body['bcc'] = array( array( 'email' => $headers['bcc'] ) );
+		$bcc = $this->build_address_objects( isset( $headers['bcc'] ) ? $headers['bcc'] : '' );
+		if ( ! empty( $bcc ) ) {
+			$body['bcc'] = $bcc;
 		}
 		if ( ! empty( $headers['reply-to'] ) ) {
-			$body['replyTo'] = array( 'email' => $headers['reply-to'] );
-		}
-
-		if ( ! empty( $atts['attachments'] ) ) {
-			$attachments = array();
-			foreach ( (array) $atts['attachments'] as $file ) {
-				if ( file_exists( $file ) ) {
-					$attachments[] = array(
-						'name'    => basename( $file ),
-						'content' => base64_encode( file_get_contents( $file ) ),
-					);
-				}
-			}
-			if ( ! empty( $attachments ) ) {
-				$body['attachment'] = $attachments;
+			$reply = $this->build_reply_to_object( $headers['reply-to'] );
+			if ( ! empty( $reply ) ) {
+				$body['replyTo'] = $reply;
 			}
 		}
 
-		$response = wp_safe_remote_post( self::API_URL, array(
-			'headers' => array(
-				'accept'       => 'application/json',
-				'api-key'      => $api_key,
-				'content-type' => 'application/json',
-			),
-			'body'    => wp_json_encode( $body ),
-			'timeout' => 15,
-		) );
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
+		$attachments = $this->build_base64_attachments( $atts, array( 'filename' => 'name', 'contents' => 'content' ) );
+		if ( ! empty( $attachments ) ) {
+			$body['attachment'] = $attachments;
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code > 299 ) {
-			$body_response = wp_remote_retrieve_body( $response );
-			$decoded       = json_decode( $body_response, true );
-			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Brevo error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
-		}
-
-		return true;
+		return $this->post_json( self::API_URL, array(
+			'accept'       => 'application/json',
+			'api-key'      => $api_key,
+			'content-type' => 'application/json',
+		), $body, 'Brevo', array( 'message' ) );
 	}
 }
