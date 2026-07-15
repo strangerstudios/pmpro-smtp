@@ -26,6 +26,15 @@ abstract class PMPRO_SMTP_Connector_Base {
 	abstract public function get_title();
 
 	/**
+	 * Get the connector's description shown on the settings page.
+	 *
+	 * @return string
+	 */
+	public function get_description() {
+		return '';
+	}
+
+	/**
 	 * Get the settings fields for this connector.
 	 *
 	 * Each field is an array with keys:
