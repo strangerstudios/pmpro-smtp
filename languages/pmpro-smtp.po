@@ -1,0 +1,428 @@
+# Copyright (C) 2026 Paid Memberships Pro
+# This file is distributed under the GPLv3 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Paid Memberships Pro - SMTP 0.1\n"
+"Report-Msgid-Bugs-To: info@paidmembershipspro.com\n"
+"Last-Translator: Paid Memberships Pro <info@paidmembershipspro.com>\n"
+"Language-Team: Paid Memberships Pro <info@paidmembershipspro.com>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-07-15T15:33:55+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: pmpro-smtp\n"
+
+#. Plugin Name of the plugin
+#: pmpro-smtp.php
+msgid "Paid Memberships Pro - SMTP"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: pmpro-smtp.php
+msgid "https://www.paidmembershipspro.com/add-ons/pmpro-smtp"
+msgstr ""
+
+#. Description of the plugin
+#: pmpro-smtp.php
+msgid "Improve email deliverability for your membership site. Connect to SMTP providers and transactional email APIs with email logging and diagnostics."
+msgstr ""
+
+#. Author of the plugin
+#: pmpro-smtp.php
+msgid "Paid Memberships Pro"
+msgstr ""
+
+#. Author URI of the plugin
+#: pmpro-smtp.php
+msgid "https://www.paidmembershipspro.com"
+msgstr ""
+
+#: adminpages/settings.php:20
+msgid "Connection"
+msgstr ""
+
+#: adminpages/settings.php:21
+msgid "Test Email"
+msgstr ""
+
+#: adminpages/settings.php:37
+#: includes/admin.php:23
+msgid "SMTP Settings"
+msgstr ""
+
+#: adminpages/settings.php:40
+msgid "Settings saved."
+msgstr ""
+
+#: adminpages/settings.php:45
+msgid "Sandbox Mode Active"
+msgstr ""
+
+#: adminpages/settings.php:45
+msgid "Emails are not being delivered. Disable sandbox mode when you are ready to send."
+msgstr ""
+
+#: adminpages/settings.php:50
+msgid "Settings Sections"
+msgstr ""
+
+#: adminpages/settings.php:100
+msgid "Edit sender settings in PMPro Email Settings"
+msgstr ""
+
+#: adminpages/settings.php:101
+msgid "Edit sender settings in WordPress General Settings"
+msgstr ""
+
+#: adminpages/settings.php:110
+msgid "Email Provider"
+msgstr ""
+
+#: adminpages/settings.php:114
+msgid "Choose the service you want to use to send your site's emails. Select a provider and enter its credentials below."
+msgstr ""
+
+#: adminpages/settings.php:119
+msgid "Current Sender"
+msgstr ""
+
+#: adminpages/settings.php:126
+msgid "By default, PMPro SMTP uses your existing WordPress or Paid Memberships Pro sender settings."
+msgstr ""
+
+#: adminpages/settings.php:143
+msgid "None (WordPress default)"
+msgstr ""
+
+#: adminpages/settings.php:153
+#: includes/admin.php:183
+msgid "Settings"
+msgstr ""
+
+#: adminpages/settings.php:215
+#: adminpages/settings.php:224
+msgid "Backup Provider"
+msgstr ""
+
+#: adminpages/settings.php:219
+msgid "Optionally configure a secondary provider. If your primary provider fails, PMPro SMTP will automatically retry with the backup."
+msgstr ""
+
+#: adminpages/settings.php:220
+msgid "Automatic failover applies only when your primary provider is an API connector. When the primary provider is Custom SMTP, WordPress sends through PHPMailer directly and the backup is not used."
+msgstr ""
+
+#: adminpages/settings.php:227
+msgid "— None —"
+msgstr ""
+
+#: adminpages/settings.php:236
+msgid "Custom SMTP cannot be used as a backup provider."
+msgstr ""
+
+#: adminpages/settings.php:248
+msgid "Sandbox Mode"
+msgstr ""
+
+#: adminpages/settings.php:255
+msgid "Enable Sandbox Mode"
+msgstr ""
+
+#: adminpages/settings.php:259
+msgid "Prevent all emails from being delivered."
+msgstr ""
+
+#: adminpages/settings.php:261
+msgid "When enabled, emails are intercepted and discarded — nothing is sent. Useful for staging and development environments. Disable before going live."
+msgstr ""
+
+#: adminpages/settings.php:269
+msgid "Save Settings"
+msgstr ""
+
+#: adminpages/settings.php:353
+msgid "Send a Test Email"
+msgstr ""
+
+#. translators: %s: link to Connection tab
+#: adminpages/settings.php:360
+#, php-format
+msgid "No provider is configured. %s to set up an email provider before sending a test."
+msgstr ""
+
+#: adminpages/settings.php:361
+msgid "Go to the Connection tab"
+msgstr ""
+
+#. translators: %s: connector title
+#: adminpages/settings.php:367
+#, php-format
+msgid "Send a test email using your configured provider: %s."
+msgstr ""
+
+#: adminpages/settings.php:374
+msgid "Send To"
+msgstr ""
+
+#: adminpages/settings.php:382
+#: includes/admin.php:77
+msgid "Send Test Email"
+msgstr ""
+
+#: includes/admin.php:24
+msgid "SMTP"
+msgstr ""
+
+#: includes/admin.php:75
+msgid "Sending..."
+msgstr ""
+
+#: includes/admin.php:76
+msgid "Test email failed: "
+msgstr ""
+
+#: includes/admin.php:78
+msgid "Request failed."
+msgstr ""
+
+#: includes/admin.php:79
+msgid "Hint:"
+msgstr ""
+
+#: includes/admin.php:80
+msgid "Show debug details"
+msgstr ""
+
+#: includes/admin.php:97
+msgid "Permission denied."
+msgstr ""
+
+#: includes/admin.php:107
+msgid "No SMTP connector is configured. Please save your settings first."
+msgstr ""
+
+#. translators: %s: site name
+#: includes/admin.php:113
+#, php-format
+msgid "[%s] PMPro SMTP Test Email"
+msgstr ""
+
+#. translators: 1: connector title, 2: site URL, 3: date and time
+#: includes/admin.php:116
+#, php-format
+msgid ""
+"This is a test email sent from your site to confirm that PMPro SMTP is configured correctly.\n"
+"\n"
+"Connector: %1$s\n"
+"Site: %2$s\n"
+"Date: %3$s"
+msgstr ""
+
+#: includes/admin.php:139
+msgid "Sandbox mode is active. The test email was not delivered."
+msgstr ""
+
+#: includes/admin.php:143
+msgid "WordPress could not send the test email."
+msgstr ""
+
+#: includes/admin.php:154
+msgid "Gmail and Google Workspace usually require an app password here, not your normal account password. If the account is managed by Google Workspace, app passwords may also need to be enabled by the Workspace admin."
+msgstr ""
+
+#. translators: %s: recipient email address (escaped client-side at render time)
+#: includes/admin.php:168
+#, php-format
+msgid "Test email sent to %s."
+msgstr ""
+
+#: includes/connectors/class-connector-base.php:75
+msgid "This connector does not support direct sending."
+msgstr ""
+
+#. translators: 1: HTTP response code, 2: error message from the provider
+#: includes/connectors/class-connector-base.php:426
+#, php-format
+msgid "%1$s error (%2$d): %3$s"
+msgstr ""
+
+#: includes/connectors/class-connector-brevo.php:25
+msgid "Brevo (formerly Sendinblue) offers transactional email sending via API. Free plan includes 300 emails/day with no daily sending limit on paid plans."
+msgstr ""
+
+#: includes/connectors/class-connector-brevo.php:32
+#: includes/connectors/class-connector-mailgun.php:40
+#: includes/connectors/class-connector-resend.php:32
+#: includes/connectors/class-connector-sendgrid.php:32
+msgid "API Key"
+msgstr ""
+
+#: includes/connectors/class-connector-brevo.php:35
+msgid "Find your API key in the Brevo dashboard under SMTP & API > API Keys."
+msgstr ""
+
+#: includes/connectors/class-connector-brevo.php:44
+msgid "Brevo API key is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:19
+msgid "Custom SMTP"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:23
+msgid "Connect to any SMTP server using a host, port, username, and password. Compatible with any mail server or service that supports SMTP."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:30
+msgid "SMTP Host"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:33
+msgid "The hostname of your outgoing mail server."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:37
+msgid "SMTP Port"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:40
+msgid "Common ports: 587 (TLS), 465 (SSL), 25 (no encryption)."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:44
+msgid "Encryption"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:47
+msgid "None"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:54
+msgid "Authentication"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:56
+msgid "Use SMTP authentication (recommended)."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:60
+msgid "Username"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:62
+msgid "Usually your full email address."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:66
+msgid "Password"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:69
+msgid "Your SMTP password or app password."
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:73
+msgid "Sender Address Compatibility"
+msgstr ""
+
+#: includes/connectors/class-connector-generic.php:75
+msgid "Use the SMTP username as the From email address for this connection. Some SMTP servers require the sender address to match the authenticated account."
+msgstr ""
+
+#: includes/connectors/class-connector-mailersend.php:25
+msgid "MailerSend is a transactional email platform with a generous free plan of 3,000 emails/month, detailed analytics, and simple API pricing."
+msgstr ""
+
+#: includes/connectors/class-connector-mailersend.php:32
+msgid "API Token"
+msgstr ""
+
+#: includes/connectors/class-connector-mailersend.php:35
+msgid "Create an API token in the MailerSend dashboard under Domains > your domain > API Tokens."
+msgstr ""
+
+#: includes/connectors/class-connector-mailersend.php:44
+msgid "MailerSend API token is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:23
+msgid "Mailgun is a transactional email service built for developers. It offers a free trial and competitive pricing based on email volume."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:30
+msgid "Region"
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:33
+msgid "US (api.mailgun.net)"
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:34
+msgid "EU (api.eu.mailgun.net)"
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:36
+msgid "Select the region where your Mailgun account is hosted."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:43
+msgid "Find your API key in the Mailgun dashboard under API Keys."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:47
+msgid "Sending Domain"
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:50
+msgid "The Mailgun sending domain you have configured."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:61
+msgid "Mailgun API key is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-mailgun.php:64
+msgid "Mailgun sending domain is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-postmark.php:25
+msgid "Postmark is a transactional email service known for fast, reliable delivery and detailed analytics. Plans start at $15/month for 10,000 emails."
+msgstr ""
+
+#: includes/connectors/class-connector-postmark.php:32
+msgid "Server Token"
+msgstr ""
+
+#: includes/connectors/class-connector-postmark.php:35
+msgid "Find your Server Token in the Postmark dashboard under your Server > API Tokens."
+msgstr ""
+
+#: includes/connectors/class-connector-postmark.php:44
+msgid "Postmark server token is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-resend.php:25
+msgid "Resend is a modern email API built for developers. It offers a generous free plan of 3,000 emails/month and straightforward pricing beyond that."
+msgstr ""
+
+#: includes/connectors/class-connector-resend.php:35
+msgid "Create an API key in your Resend dashboard under API Keys."
+msgstr ""
+
+#: includes/connectors/class-connector-resend.php:44
+msgid "Resend API key is not configured."
+msgstr ""
+
+#: includes/connectors/class-connector-sendgrid.php:25
+msgid "Send at scale with Twilio SendGrid, boasting an industry-leading 99% deliverability rate. SendGrid offers a free plan of 100 emails/day and paid plans starting at $19.95/month."
+msgstr ""
+
+#: includes/connectors/class-connector-sendgrid.php:35
+msgid "Create an API key in your SendGrid account under Settings > API Keys."
+msgstr ""
+
+#: includes/connectors/class-connector-sendgrid.php:44
+msgid "SendGrid API key is not configured."
+msgstr ""
