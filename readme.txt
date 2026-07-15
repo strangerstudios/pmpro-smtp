@@ -1,7 +1,7 @@
 === Paid Memberships Pro - SMTP ===
 Contributors: strangerstudios
 Requires at least: 6.3
-Tested up to: 6.8
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: 0.1
 License: GPLv3 or later
@@ -58,6 +58,6 @@ PMPro applies its optional `email_header.html` / `email_footer.html` theme templ
 
 == Changelog ==
 
-= 0.1 =
+= 0.1 - 2026-07-15 =
 
 * Initial release.
