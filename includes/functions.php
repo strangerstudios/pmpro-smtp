@@ -82,6 +82,12 @@ function pmpro_smtp_get_active_connector() {
  * @return null|bool
  */
 function pmpro_smtp_pre_wp_mail( $return, $atts ) {
+	// Another pre_wp_mail filter already short-circuited this email (the filter
+	// is chained, so we still run) — sending again would deliver a duplicate.
+	if ( null !== $return ) {
+		return $return;
+	}
+
 	// Sandbox: discard without firing wp_mail_succeeded; clear PMPro's stash so it does not linger.
 	if ( pmpro_smtp_is_test_mode() ) {
 		if ( function_exists( 'pmpro_stashed_mail_data' ) ) {
@@ -244,6 +250,12 @@ function pmpro_smtp_capture_phpmailer_debug( $phpmailer ) {
 	$phpmailer->SMTPDebug = 2;
 	$phpmailer->Debugoutput = static function( $message, $level ) {
 		$data = pmpro_smtp_debug_data();
+		// Re-check at capture time: the global PHPMailer (and this closure)
+		// outlives the test-email flow that armed it, so a later send in the
+		// same request must not record into the deactivated buffer.
+		if ( empty( $data['active'] ) ) {
+			return;
+		}
 		$data['log'][] = sprintf( '[%s] %s', $level, trim( $message ) );
 		pmpro_smtp_debug_data( $data );
 	};
