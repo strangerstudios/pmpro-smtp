@@ -40,7 +40,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 				'label'     => __( 'API Key', 'pmpro-smtp' ),
 				'type'      => 'password',
 				'sensitive' => true,
-				'desc'      => __( 'Find your API key in the Mailgun dashboard under API Keys. Stored encrypted.', 'pmpro-smtp' ),
+				'desc'      => __( 'Find your API key in the Mailgun dashboard under API Keys.', 'pmpro-smtp' ),
 			),
 			array(
 				'key'         => 'domain',
@@ -52,8 +52,8 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		);
 	}
 
-	protected function do_send( array $atts ) {
-		$api_key = pmpro_smtp_decrypt( $this->get_setting( 'api_key' ) );
+	public function send( array $atts ) {
+		$api_key = $this->get_setting( 'api_key' );
 		$domain  = $this->get_setting( 'domain' );
 		$region  = $this->get_setting( 'region', 'us' );
 
@@ -67,25 +67,16 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		$base_url = ( 'eu' === $region ) ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
 		$api_url  = $base_url . '/v3/' . $domain . '/messages';
 
-		$from_email = $this->get_from_email();
-		$from_name  = $this->get_from_name();
-		$from       = ! empty( $from_name ) ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
-
-		$to      = is_array( $atts['to'] ) ? implode( ', ', $atts['to'] ) : $atts['to'];
+		$from    = $this->format_from( $atts );
+		$to      = implode( ', ', $this->normalize_recipients( $atts['to'] ) );
 		$headers = $this->parse_headers( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		$is_html = ! empty( $headers['content-type'] ) && strpos( $headers['content-type'], 'text/html' ) !== false;
+		$is_html = $this->is_html_message( $headers );
 
 		$body = array(
 			'from'    => $from,
 			'to'      => $to,
 			'subject' => $atts['subject'],
 		);
-
-		if ( $is_html ) {
-			$body['html'] = $atts['message'];
-		} else {
-			$body['text'] = $atts['message'];
-		}
 
 		if ( ! empty( $headers['cc'] ) ) {
 			$body['cc'] = $headers['cc'];
@@ -97,39 +88,93 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 			$body['h:Reply-To'] = $headers['reply-to'];
 		}
 
-		$files = array();
-		if ( ! empty( $atts['attachments'] ) ) {
-			foreach ( (array) $atts['attachments'] as $file ) {
-				if ( file_exists( $file ) ) {
-					$files[] = array(
-						'name'     => 'attachment[]',
-						'filename' => basename( $file ),
-						'contents' => file_get_contents( $file ),
-					);
-				}
-			}
+		// Every field so far becomes a header of the outgoing message, so strip
+		// CR/LF to keep a crafted subject or recipient from injecting extra
+		// headers at Mailgun's end — wp_mail() is short-circuited on this path,
+		// so PHPMailer's own header sanitization never runs. The message body is
+		// added after this loop because its newlines are legitimate.
+		foreach ( $body as $key => $value ) {
+			$body[ $key ] = str_replace( array( "\r", "\n" ), '', (string) $value );
+		}
+
+		if ( $is_html ) {
+			$body['html'] = $atts['message'];
+		} else {
+			$body['text'] = $atts['message'];
+		}
+
+		$files = $this->read_attachments( $atts );
+
+		$request_headers = array(
+			'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ),
+		);
+
+		// Mailgun expects file attachments as multipart/form-data uploads. The
+		// WordPress HTTP API does not build multipart bodies from an array, so
+		// when there are attachments we construct the multipart body manually
+		// and set the matching Content-Type boundary header.
+		if ( ! empty( $files ) ) {
+			$boundary       = wp_generate_password( 24, false );
+			$request_body   = $this->build_multipart_body( $body, $files, $boundary );
+			$request_headers['Content-Type'] = 'multipart/form-data; boundary=' . $boundary;
+		} else {
+			$request_body = $body;
 		}
 
 		$response = wp_safe_remote_post( $api_url, array(
-			'headers' => array(
-				'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ),
-			),
-			'body'    => $body,
+			'headers' => $request_headers,
+			'body'    => $request_body,
 			'timeout' => 15,
 		) );
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
+		return $this->handle_api_response( $response, 'Mailgun', array( 'message' ) );
+	}
+
+	/**
+	 * Build a multipart/form-data request body for Mailgun (fields + file uploads).
+	 *
+	 * @param array  $fields   Scalar form fields (from, to, subject, body, etc.).
+	 * @param array  $files    File parts, each { filename, type, contents }.
+	 * @param string $boundary Multipart boundary string.
+	 * @return string
+	 */
+	protected function build_multipart_body( array $fields, array $files, $boundary ) {
+		$eol  = "\r\n";
+		$data = '';
+
+		foreach ( $fields as $name => $value ) {
+			// Only the Content-Disposition header needs stripping here. The value
+			// below the blank line is part content, where newlines are legal and
+			// required (message bodies); the random boundary prevents part
+			// injection there, and send() already strips CR/LF from the
+			// header-like fields before they reach this builder.
+			$data .= '--' . $boundary . $eol;
+			$data .= 'Content-Disposition: form-data; name="' . $this->sanitize_part_header_value( $name ) . '"' . $eol . $eol;
+			$data .= (string) $value . $eol;
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code > 299 ) {
-			$body_response = wp_remote_retrieve_body( $response );
-			$decoded       = json_decode( $body_response, true );
-			$message       = ! empty( $decoded['message'] ) ? $decoded['message'] : $body_response;
-			return new WP_Error( 'pmpro_smtp_send_failed', sprintf( __( 'Mailgun error (%d): %s', 'pmpro-smtp' ), $code, $message ) );
+		foreach ( $files as $file ) {
+			$filename = $this->sanitize_part_header_value( $file['filename'] );
+			$type     = $this->sanitize_part_header_value( $file['type'] );
+			$data    .= '--' . $boundary . $eol;
+			$data    .= 'Content-Disposition: form-data; name="attachment"; filename="' . $filename . '"' . $eol;
+			$data    .= 'Content-Type: ' . $type . $eol . $eol;
+			$data    .= $file['contents'] . $eol;
 		}
 
-		return true;
+		$data .= '--' . $boundary . '--' . $eol;
+
+		return $data;
+	}
+
+	/**
+	 * Strip characters that would break out of a quoted multipart part-header
+	 * value (CR/LF end the header line; a double-quote closes the quoted string).
+	 *
+	 * @param string $value
+	 * @return string
+	 */
+	protected function sanitize_part_header_value( $value ) {
+		return str_replace( array( "\r", "\n", '"' ), '', (string) $value );
 	}
 }

@@ -34,6 +34,8 @@ function pmpro_smtp_settings_page() {
 
 	<div class="wrap pmpro_admin">
 
+		<h1><?php esc_html_e( 'SMTP Settings', 'pmpro-smtp' ); ?></h1>
+
 		<?php if ( $saved ) : ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Settings saved.', 'pmpro-smtp' ); ?></p></div>
 		<?php endif; ?>
@@ -48,10 +50,10 @@ function pmpro_smtp_settings_page() {
 			<h2 id="pmpro-smtp-menu" class="screen-reader-text"><?php esc_html_e( 'Settings Sections', 'pmpro-smtp' ); ?></h2>
 			<ul>
 				<?php foreach ( $tabs as $tab_key => $tab_label ) :
-					$url   = add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => $tab_key ), admin_url( 'admin.php' ) );
+					$url = add_query_arg( array( 'page' => 'pmpro-smtp', 'tab' => $tab_key ), admin_url( 'admin.php' ) );
 					?>
 					<li>
-						<a href="<?php echo esc_url( $url ); ?>"<?php echo ( $tab_key === $active_tab ) ? ' class="current"' : '' ?> ><?php echo esc_html( $tab_label ); ?></a>
+						<a href="<?php echo esc_url( $url ); ?>"<?php echo ( $tab_key === $active_tab ) ? ' class="current" aria-current="page"' : ''; ?>><?php echo esc_html( $tab_label ); ?></a>
 					</li>
 				<?php endforeach; ?>
 			</ul>
@@ -82,8 +84,14 @@ function pmpro_smtp_render_connection_tab() {
 	$backup_connector_key = get_option( 'pmpro_smtp_backup_connector', '' );
 	$test_mode            = get_option( 'pmpro_smtp_test_mode', false );
 	$connectors           = pmpro_smtp_get_connectors();
-	$effective_from_email = apply_filters( 'wp_mail_from', get_option( 'admin_email' ) );
-	$effective_from_name  = apply_filters( 'wp_mail_from_name', get_option( 'blogname' ) );
+	// Seed the filters with the same defaults WordPress core uses so the
+	// displayed sender matches what is actually sent (and so PMPro's
+	// wp_mail_from override, which only fires on the core default, applies here
+	// too). The default address is derived by the shared connector helper, which
+	// mirrors wp-includes/pluggable.php, so this display cannot drift from what
+	// the connectors actually send.
+	$effective_from_email = apply_filters( 'wp_mail_from', PMPRO_SMTP_Connector_Base::default_from_email() );
+	$effective_from_name  = apply_filters( 'wp_mail_from_name', 'WordPress' );
 	$pmpro_active         = defined( 'PMPRO_VERSION' );
 	$sender_settings_url  = $pmpro_active
 		? admin_url( 'admin.php?page=pmpro-emailsettings' )
@@ -138,9 +146,6 @@ function pmpro_smtp_render_connection_tab() {
 
 				<?php foreach ( $connectors as $key => $connector ) :
 					$fields = $connector->get_settings_fields();
-					if ( empty( $fields ) ) {
-						continue;
-					}
 					$connector_settings = get_option( 'pmpro_smtp_connector_' . $key, array() );
 					?>
 					<div class="pmpro-smtp-connector-fields" id="pmpro-smtp-fields-<?php echo esc_attr( $key ); ?>" <?php echo ( $key !== $active_connector_key ) ? 'style="display:none;"' : ''; ?>>
@@ -152,9 +157,8 @@ function pmpro_smtp_render_connection_tab() {
 						<table class="form-table">
 							<tbody>
 								<?php foreach ( $fields as $field ) :
-									$field_key    = 'pmpro_smtp_connector_' . $key . '_' . $field['key'];
-									$saved_val    = isset( $connector_settings[ $field['key'] ] ) ? $connector_settings[ $field['key'] ] : '';
-									$is_sensitive = ! empty( $field['sensitive'] );
+									$field_key = 'pmpro_smtp_connector_' . $key . '_' . $field['key'];
+									$saved_val = isset( $connector_settings[ $field['key'] ] ) ? $connector_settings[ $field['key'] ] : '';
 									?>
 									<tr>
 										<th scope="row">
@@ -174,20 +178,19 @@ function pmpro_smtp_render_connection_tab() {
 												</label>
 											<?php elseif ( 'password' === $field['type'] ) : ?>
 												<input
-													type="password"
+													type="text"
 													name="<?php echo esc_attr( $field_key ); ?>"
 													id="<?php echo esc_attr( $field_key ); ?>"
-													value=""
-													placeholder="<?php echo ( $is_sensitive && ! empty( $saved_val ) ) ? esc_attr__( '(stored — enter to change)', 'pmpro-smtp' ) : ''; ?>"
-													class="regular-text"
-													autocomplete="new-password"
+													value="<?php echo esc_attr( $saved_val ); ?>"
+													class="regular-text code pmpro-smtp-secure-key"
+													autocomplete="off"
 												/>
 											<?php else : ?>
 												<input
 													type="<?php echo esc_attr( $field['type'] ); ?>"
 													name="<?php echo esc_attr( $field_key ); ?>"
 													id="<?php echo esc_attr( $field_key ); ?>"
-													value="<?php echo esc_attr( $is_sensitive ? '' : $saved_val ); ?>"
+													value="<?php echo esc_attr( $saved_val ); ?>"
 													placeholder="<?php echo isset( $field['placeholder'] ) ? esc_attr( $field['placeholder'] ) : ''; ?>"
 													class="regular-text"
 												/>
@@ -214,6 +217,7 @@ function pmpro_smtp_render_connection_tab() {
 			</div>
 			<div class="pmpro_section_inside">
 				<p><?php esc_html_e( 'Optionally configure a secondary provider. If your primary provider fails, PMPro SMTP will automatically retry with the backup.', 'pmpro-smtp' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Automatic failover applies only when your primary provider is an API connector. When the primary provider is Custom SMTP, WordPress sends through PHPMailer directly and the backup is not used.', 'pmpro-smtp' ); ?></p>
 				<table class="form-table">
 					<tbody>
 						<tr>
@@ -268,6 +272,12 @@ function pmpro_smtp_render_connection_tab() {
 }
 
 function pmpro_smtp_save_connection_settings() {
+	// Explicit capability check — do not rely solely on the menu registration
+	// gate so authorization survives any future change to how this runs.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
+
 	$connectors = pmpro_smtp_get_connectors();
 
 	// Active connector.
@@ -277,9 +287,11 @@ function pmpro_smtp_save_connection_settings() {
 	}
 	update_option( 'pmpro_smtp_active_connector', $active );
 
-	// Backup connector.
+	// Backup connector. The UI already hides Generic and the active connector,
+	// but enforce both here so a crafted POST cannot select them (a backup equal
+	// to the primary would just retry the same failing provider).
 	$backup = isset( $_POST['pmpro_smtp_backup_connector'] ) ? sanitize_key( wp_unslash( $_POST['pmpro_smtp_backup_connector'] ) ) : '';
-	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup ) ) {
+	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup || $backup === $active ) ) {
 		$backup = '';
 	}
 	update_option( 'pmpro_smtp_backup_connector', $backup );
@@ -308,10 +320,14 @@ function pmpro_smtp_save_connection_settings() {
 			$raw_value = wp_unslash( $_POST[ $post_key ] );
 
 			if ( 'password' === $field['type'] && ! empty( $field['sensitive'] ) ) {
-				if ( '' === $raw_value ) {
-					continue; // Empty = keep existing.
-				}
-				$connector_data[ $field['key'] ] = pmpro_smtp_encrypt( $raw_value );
+				// Store the secret with surrounding whitespace and any embedded
+				// CR/LF removed (the latter would otherwise allow header injection
+				// when the value is used in an HTTP Authorization header), but
+				// without sanitize_text_field(), which would mangle characters that
+				// are legitimate in passwords/tokens. Mirrors how PMPro core stores
+				// gateway secrets. The field shows its saved value, so an empty
+				// submission means the admin cleared it.
+				$connector_data[ $field['key'] ] = str_replace( array( "\r", "\n" ), '', trim( $raw_value ) );
 			} else {
 				$connector_data[ $field['key'] ] = sanitize_text_field( $raw_value );
 			}
@@ -365,7 +381,7 @@ function pmpro_smtp_render_test_tab() {
 				<p>
 					<button type="button" id="pmpro-smtp-send-test" class="button button-primary"><?php esc_html_e( 'Send Test Email', 'pmpro-smtp' ); ?></button>
 				</p>
-				<div id="pmpro-smtp-test-result" style="display:none;" class="notice inline"></div>
+				<div id="pmpro-smtp-test-result" class="notice inline" role="status" aria-live="polite" style="display:none;"></div>
 			<?php endif; ?>
 		</div>
 	</div>

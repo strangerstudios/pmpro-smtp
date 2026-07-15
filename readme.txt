@@ -25,6 +25,8 @@ Features include:
 
 From name and from email settings remain managed by WordPress and Paid Memberships Pro.
 
+Automatic backup failover applies only when the primary provider is an API connector. When the primary provider is Custom SMTP, WordPress sends through PHPMailer directly, so the configured backup provider is not used.
+
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/` or install it as usual.
@@ -49,6 +51,10 @@ Yes. Use the `Custom SMTP` connector with:
 = Does this replace PMPro email logging? =
 
 No. PMPro core continues to handle email logging.
+
+= Why does my email header/footer look different on an API provider? =
+
+PMPro applies its optional `email_header.html` / `email_footer.html` theme templates (and `wpautop`/`make_clickable`) on the `phpmailer_init` action. API connectors (SendGrid, Mailgun, Postmark, Brevo, Resend, MailerSend) send via the provider's HTTP API and short-circuit WordPress before PHPMailer is constructed, so those legacy theme header/footer files are not applied on the API path. The `Custom SMTP` connector goes through PHPMailer and applies them as usual. If your theme ships those header/footer files and you need them on every send, use the `Custom SMTP` connector. (Most PMPro email templates already include their own HTML wrapping and are unaffected.)
 
 == Changelog ==
 

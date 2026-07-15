@@ -27,7 +27,6 @@ function pmpro_smtp_admin_menu() {
 		'pmpro_smtp_render_settings_page',
 		999
 	);
-
 }
 add_action( 'admin_menu', 'pmpro_smtp_admin_menu' );
 
@@ -47,14 +46,10 @@ function pmpro_smtp_render_settings_page() {
  * Enqueue admin CSS and JS on our pages only.
  */
 function pmpro_smtp_admin_enqueue_scripts() {
-	$screen = get_current_screen();
-	if ( ! $screen ) {
-		return;
-	}
-
-	// Only on our admin pages.
-	$our_pages = array( 'memberships_page_pmpro-smtp' );
-	if ( ! in_array( $screen->id, $our_pages, true ) ) {
+	// Only on our admin page. Gate on the page query arg (as PMPro core does)
+	// rather than the screen ID, which embeds PMPro's translated "Memberships"
+	// menu title and so differs on non-English admins.
+	if ( ! isset( $_REQUEST['page'] ) || 'pmpro-smtp' !== $_REQUEST['page'] ) {
 		return;
 	}
 
@@ -77,9 +72,12 @@ function pmpro_smtp_admin_enqueue_scripts() {
 		'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 		'nonce'   => wp_create_nonce( 'pmpro_smtp_admin' ),
 		'i18n'    => array(
-			'sending'     => __( 'Sending...', 'pmpro-smtp' ),
-			'testSuccess' => __( 'Test email sent successfully!', 'pmpro-smtp' ),
-			'testFailed'  => __( 'Test email failed: ', 'pmpro-smtp' ),
+			'sending'       => __( 'Sending...', 'pmpro-smtp' ),
+			'testFailed'    => __( 'Test email failed: ', 'pmpro-smtp' ),
+			'sendButton'    => __( 'Send Test Email', 'pmpro-smtp' ),
+			'requestFailed' => __( 'Request failed.', 'pmpro-smtp' ),
+			'hintLabel'     => __( 'Hint:', 'pmpro-smtp' ),
+			'showDebug'     => __( 'Show debug details', 'pmpro-smtp' ),
 		),
 	) );
 }
@@ -111,9 +109,11 @@ function pmpro_smtp_ajax_send_test() {
 
 	$atts = array(
 		'to'      => $to,
+		/* translators: %s: site name */
 		'subject' => sprintf( __( '[%s] PMPro SMTP Test Email', 'pmpro-smtp' ), get_option( 'blogname' ) ),
 		'message' => sprintf(
-			__( "This is a test email sent from your site to confirm that PMPro SMTP is configured correctly.\n\nConnector: %s\nSite: %s\nDate: %s", 'pmpro-smtp' ),
+			/* translators: 1: connector title, 2: site URL, 3: date and time */
+			__( "This is a test email sent from your site to confirm that PMPro SMTP is configured correctly.\n\nConnector: %1\$s\nSite: %2\$s\nDate: %3\$s", 'pmpro-smtp' ),
 			$connector->get_title(),
 			home_url(),
 			current_time( 'Y-m-d H:i:s' )
@@ -122,7 +122,7 @@ function pmpro_smtp_ajax_send_test() {
 		'attachments' => array(),
 	);
 
-	pmpro_smtp_begin_debug_capture();
+	pmpro_smtp_debug_data( array( 'active' => true ) );
 
 	$result = wp_mail(
 		$atts['to'],
@@ -132,7 +132,8 @@ function pmpro_smtp_ajax_send_test() {
 		$atts['attachments']
 	);
 
-	$debug = pmpro_smtp_end_debug_capture();
+	$debug = pmpro_smtp_debug_data();
+	pmpro_smtp_debug_data( false );
 
 	if ( pmpro_smtp_is_test_mode() ) {
 		wp_send_json_success( __( 'Sandbox mode is active. The test email was not delivered.', 'pmpro-smtp' ) );
@@ -140,11 +141,7 @@ function pmpro_smtp_ajax_send_test() {
 
 	if ( ! $result ) {
 		$message = ! empty( $debug['error'] ) ? $debug['error'] : __( 'WordPress could not send the test email.', 'pmpro-smtp' );
-		$details = array();
-
-		if ( ! empty( $debug['log'] ) ) {
-			$details[] = implode( "\n", $debug['log'] );
-		}
+		$details = ! empty( $debug['log'] ) ? implode( "\n", $debug['log'] ) : '';
 
 		$hint = '';
 		if ( 'generic' === $connector->get_name() ) {
@@ -161,13 +158,14 @@ function pmpro_smtp_ajax_send_test() {
 		wp_send_json_error(
 			array(
 				'message' => $message,
-				'details' => implode( "\n\n", array_filter( $details ) ),
+				'details' => $details,
 				'hint'    => $hint,
 			)
 		);
 	}
 
-	wp_send_json_success( sprintf( __( 'Test email sent to %s.', 'pmpro-smtp' ), esc_html( $to ) ) );
+	/* translators: %s: recipient email address (escaped client-side at render time) */
+	wp_send_json_success( sprintf( __( 'Test email sent to %s.', 'pmpro-smtp' ), $to ) );
 }
 add_action( 'wp_ajax_pmpro_smtp_send_test', 'pmpro_smtp_ajax_send_test' );
 
