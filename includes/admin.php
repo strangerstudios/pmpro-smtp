@@ -46,14 +46,10 @@ function pmpro_smtp_render_settings_page() {
  * Enqueue admin CSS and JS on our pages only.
  */
 function pmpro_smtp_admin_enqueue_scripts() {
-	$screen = get_current_screen();
-	if ( ! $screen ) {
-		return;
-	}
-
-	// Only on our admin pages.
-	$our_pages = array( 'memberships_page_pmpro-smtp' );
-	if ( ! in_array( $screen->id, $our_pages, true ) ) {
+	// Only on our admin page. Gate on the page query arg (as PMPro core does)
+	// rather than the screen ID, which embeds PMPro's translated "Memberships"
+	// menu title and so differs on non-English admins.
+	if ( ! isset( $_REQUEST['page'] ) || 'pmpro-smtp' !== $_REQUEST['page'] ) {
 		return;
 	}
 

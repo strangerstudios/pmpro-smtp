@@ -35,7 +35,11 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 *   - options    (array)   For select fields: value => label pairs.
 	 *   - desc       (string)  Optional help text.
 	 *   - placeholder (string) Optional placeholder.
-	 *   - sensitive  (bool)    If true, the value is write-only in the UI (never echoed back).
+	 *   - sensitive  (bool)    If true, the value is stored raw (trimmed, CR/LF
+	 *                          stripped) instead of via sanitize_text_field(), and
+	 *                          rendered like PMPro core's gateway secret fields: a
+	 *                          text input with the saved value echoed back, masked
+	 *                          with CSS.
 	 *
 	 * @return array
 	 */
@@ -339,7 +343,18 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 */
 	protected function format_from( array $atts ) {
 		$sender = $this->resolve_from( isset( $atts['headers'] ) ? $atts['headers'] : array() );
-		return ! empty( $sender['name'] ) ? sprintf( '%s <%s>', $sender['name'], $sender['email'] ) : $sender['email'];
+		if ( empty( $sender['name'] ) ) {
+			return $sender['email'];
+		}
+		$name = $sender['name'];
+		// parse_recipient() strips quoted-string wrappers, so names containing
+		// RFC 5322 specials (e.g. the comma in 'Acme, Inc.') must be re-quoted
+		// here or providers will parse the from string as an address list and
+		// split the name into bogus addresses.
+		if ( preg_match( '/[()<>\[\]:;@\\\\,."]/', $name ) ) {
+			$name = '"' . addcslashes( $name, '"\\' ) . '"';
+		}
+		return sprintf( '%s <%s>', $name, $sender['email'] );
 	}
 
 	/**
@@ -456,7 +471,15 @@ abstract class PMPRO_SMTP_Connector_Base {
 		$recipient = trim( $recipient );
 		// Match "Name <email>" as well as a bare "<email>" with no display name.
 		if ( preg_match( '/^(?:(.*?)\s*)?<(.+?)>\s*$/', $recipient, $matches ) ) {
-			return array( 'name' => trim( $matches[1] ), 'email' => trim( $matches[2] ) );
+			$name = trim( $matches[1] );
+			// Unwrap an RFC 5322 quoted-string display name (e.g. '"Doe, John"
+			// <j@x.com>') so APIs receive the bare name: remove the single
+			// wrapping quote pair and undo quoted-pair escapes (\" and \\).
+			// format_from() re-quotes names that need it when re-serializing.
+			if ( strlen( $name ) >= 2 && '"' === $name[0] && '"' === substr( $name, -1 ) ) {
+				$name = trim( stripslashes( substr( $name, 1, -1 ) ) );
+			}
+			return array( 'name' => $name, 'email' => trim( $matches[2] ) );
 		}
 		return array( 'name' => '', 'email' => $recipient );
 	}

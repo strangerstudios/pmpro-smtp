@@ -47,6 +47,12 @@
 	margin-top: 8px;
 }
 
+/* Mask secret values on screen, matching PMPro core's gateway key fields
+   (.pmpro-admin-secure-key in PMPro's admin.css). */
+.pmpro-smtp-connector-fields .pmpro-smtp-secure-key {
+	-webkit-text-security: disc;
+}
+
 /* ---- Test email result ---- */
 #pmpro-smtp-test-result {
 	margin-top: 12px;

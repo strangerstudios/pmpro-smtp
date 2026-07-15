@@ -107,7 +107,7 @@ function pmpro_smtp_pre_wp_mail( $return, $atts ) {
 	if ( is_wp_error( $result ) ) {
 		$backup_slug = get_option( 'pmpro_smtp_backup_connector', '' );
 		$connectors  = pmpro_smtp_get_connectors();
-		if ( ! empty( $backup_slug ) && isset( $connectors[ $backup_slug ] ) && 'generic' !== $backup_slug ) {
+		if ( ! empty( $backup_slug ) && isset( $connectors[ $backup_slug ] ) && 'generic' !== $backup_slug && $backup_slug !== $connector->get_name() ) {
 			$result = $connectors[ $backup_slug ]->send( $atts );
 		}
 	}

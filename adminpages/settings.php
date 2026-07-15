@@ -182,7 +182,7 @@ function pmpro_smtp_render_connection_tab() {
 													name="<?php echo esc_attr( $field_key ); ?>"
 													id="<?php echo esc_attr( $field_key ); ?>"
 													value="<?php echo esc_attr( $saved_val ); ?>"
-													class="regular-text code"
+													class="regular-text code pmpro-smtp-secure-key"
 													autocomplete="off"
 												/>
 											<?php else : ?>
@@ -287,9 +287,11 @@ function pmpro_smtp_save_connection_settings() {
 	}
 	update_option( 'pmpro_smtp_active_connector', $active );
 
-	// Backup connector.
+	// Backup connector. The UI already hides Generic and the active connector,
+	// but enforce both here so a crafted POST cannot select them (a backup equal
+	// to the primary would just retry the same failing provider).
 	$backup = isset( $_POST['pmpro_smtp_backup_connector'] ) ? sanitize_key( wp_unslash( $_POST['pmpro_smtp_backup_connector'] ) ) : '';
-	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup ) ) {
+	if ( ! empty( $backup ) && ( ! isset( $connectors[ $backup ] ) || 'generic' === $backup || $backup === $active ) ) {
 		$backup = '';
 	}
 	update_option( 'pmpro_smtp_backup_connector', $backup );

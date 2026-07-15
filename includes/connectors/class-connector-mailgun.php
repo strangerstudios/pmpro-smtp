@@ -78,12 +78,6 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 			'subject' => $atts['subject'],
 		);
 
-		if ( $is_html ) {
-			$body['html'] = $atts['message'];
-		} else {
-			$body['text'] = $atts['message'];
-		}
-
 		if ( ! empty( $headers['cc'] ) ) {
 			$body['cc'] = $headers['cc'];
 		}
@@ -92,6 +86,21 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		}
 		if ( ! empty( $headers['reply-to'] ) ) {
 			$body['h:Reply-To'] = $headers['reply-to'];
+		}
+
+		// Every field so far becomes a header of the outgoing message, so strip
+		// CR/LF to keep a crafted subject or recipient from injecting extra
+		// headers at Mailgun's end — wp_mail() is short-circuited on this path,
+		// so PHPMailer's own header sanitization never runs. The message body is
+		// added after this loop because its newlines are legitimate.
+		foreach ( $body as $key => $value ) {
+			$body[ $key ] = str_replace( array( "\r", "\n" ), '', (string) $value );
+		}
+
+		if ( $is_html ) {
+			$body['html'] = $atts['message'];
+		} else {
+			$body['text'] = $atts['message'];
 		}
 
 		$files = $this->read_attachments( $atts );
@@ -134,18 +143,19 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		$data = '';
 
 		foreach ( $fields as $name => $value ) {
-			$name = str_replace( array( "\r", "\n", '"' ), '', (string) $name );
-			// Strip CR/LF to prevent MIME part injection (double-quotes are legal here).
-			$value = str_replace( array( "\r", "\n" ), '', (string) $value );
+			// Only the Content-Disposition header needs stripping here. The value
+			// below the blank line is part content, where newlines are legal and
+			// required (message bodies); the random boundary prevents part
+			// injection there, and send() already strips CR/LF from the
+			// header-like fields before they reach this builder.
 			$data .= '--' . $boundary . $eol;
-			$data .= 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol;
-			$data .= $value . $eol;
+			$data .= 'Content-Disposition: form-data; name="' . $this->sanitize_part_header_value( $name ) . '"' . $eol . $eol;
+			$data .= (string) $value . $eol;
 		}
 
 		foreach ( $files as $file ) {
-			// Strip CR/LF and double-quotes from the filename to prevent MIME header injection.
-			$filename = str_replace( array( "\r", "\n", '"' ), '', (string) $file['filename'] );
-			$type     = str_replace( array( "\r", "\n", '"' ), '', (string) $file['type'] );
+			$filename = $this->sanitize_part_header_value( $file['filename'] );
+			$type     = $this->sanitize_part_header_value( $file['type'] );
 			$data    .= '--' . $boundary . $eol;
 			$data    .= 'Content-Disposition: form-data; name="attachment"; filename="' . $filename . '"' . $eol;
 			$data    .= 'Content-Type: ' . $type . $eol . $eol;
@@ -155,5 +165,16 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		$data .= '--' . $boundary . '--' . $eol;
 
 		return $data;
+	}
+
+	/**
+	 * Strip characters that would break out of a quoted multipart part-header
+	 * value (CR/LF end the header line; a double-quote closes the quoted string).
+	 *
+	 * @param string $value
+	 * @return string
+	 */
+	protected function sanitize_part_header_value( $value ) {
+		return str_replace( array( "\r", "\n", '"' ), '', (string) $value );
 	}
 }
