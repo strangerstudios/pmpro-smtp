@@ -106,15 +106,29 @@ function pmpro_smtp_pre_wp_mail( $return, $atts ) {
 		return $return;
 	}
 
+	// Apply PMPro core's PHPMailer-level formatting (pmpro_send_html), which never
+	// runs on this short-circuit path. Same registration condition as native: PMPro
+	// only formats while its wp_mail_content_type filter is hooked. Format a
+	// send-only copy: on the native path, the wp_mail_succeeded/wp_mail_failed
+	// payloads and PMPro's email log stash hold the unformatted body, so $atts
+	// must stay untouched.
+	$send_atts = $atts;
+	if ( has_filter( 'wp_mail_content_type', 'pmpro_wp_mail_content_type' ) ) {
+		$send_atts['message'] = pmpro_smtp_format_html_message(
+			isset( $send_atts['message'] ) ? $send_atts['message'] : '',
+			isset( $send_atts['subject'] ) ? $send_atts['subject'] : ''
+		);
+	}
+
 	// Send via primary connector.
-	$result = $connector->send( $atts );
+	$result = $connector->send( $send_atts );
 
 	// Try backup connector on failure.
 	if ( is_wp_error( $result ) ) {
 		$backup_slug = get_option( 'pmpro_smtp_backup_connector', '' );
 		$connectors  = pmpro_smtp_get_connectors();
 		if ( ! empty( $backup_slug ) && isset( $connectors[ $backup_slug ] ) && 'generic' !== $backup_slug && $backup_slug !== $connector->get_name() ) {
-			$result = $connectors[ $backup_slug ]->send( $atts );
+			$result = $connectors[ $backup_slug ]->send( $send_atts );
 		}
 	}
 
@@ -131,6 +145,60 @@ function pmpro_smtp_pre_wp_mail( $return, $atts ) {
 	return true;
 }
 add_filter( 'pre_wp_mail', 'pmpro_smtp_pre_wp_mail', 10, 2 );
+
+/**
+ * Apply PMPro core's PHPMailer-level email formatting to a message body.
+ *
+ * PMProEmail assembles its own emails completely before wp_mail() — template
+ * body, Email Templates header/footer, and !!variable!! substitution all
+ * happen in the class. What it does NOT do is pmpro_send_html(), which PMPro
+ * registers on phpmailer_init and which is still responsible for:
+ *   - HTML-ifying plain-text emails (wpautop, make_clickable, stripping <>
+ *     around URLs). PMPro forces text/html for ALL site emails, including
+ *     WordPress core messages like password resets, which would otherwise
+ *     render as one unbroken line with broken links.
+ *   - Wrapping every email with the theme's email_header.html /
+ *     email_footer.html files.
+ *   - Replacing the generic !!variables!! (sitename, subject, name, ...)
+ *     those theme files may contain — nothing earlier substitutes them,
+ *     since the files are attached after PMProEmail's own substitution.
+ *
+ * API connectors short-circuit wp_mail() via pre_wp_mail before PHPMailer is
+ * constructed, so phpmailer_init never fires. Rather than mirroring
+ * pmpro_send_html() here (and drifting from core over time), run the real
+ * function against a detached PHPMailer instance and use the Body it
+ * produces. Other phpmailer_init callbacks are intentionally not fired — they
+ * belong to the transport layer this path replaces.
+ *
+ * @param string $message Raw message body passed to wp_mail().
+ * @param string $subject Email subject; used for !!subject!! replacement.
+ * @return string Formatted HTML message body.
+ */
+function pmpro_smtp_format_html_message( $message, $subject ) {
+	if ( ! function_exists( 'pmpro_send_html' ) ) {
+		return $message;
+	}
+
+	if ( ! class_exists( 'PHPMailer\PHPMailer\PHPMailer' ) ) {
+		require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
+		require_once ABSPATH . WPINC . '/PHPMailer/SMTP.php';
+		require_once ABSPATH . WPINC . '/PHPMailer/Exception.php';
+	}
+
+	$mailer          = new PHPMailer\PHPMailer\PHPMailer( true );
+	$mailer->Subject = $subject;
+	$mailer->Body    = $message;
+
+	try {
+		pmpro_send_html( $mailer );
+	} catch ( Throwable $e ) {
+		// A pmpro_after_phpmailer_init callback threw. Send the message
+		// unformatted rather than not at all.
+		return $message;
+	}
+
+	return $mailer->Body;
+}
 
 /**
  * Configure PHPMailer for the Generic SMTP connector.
