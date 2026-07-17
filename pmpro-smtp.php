@@ -3,7 +3,7 @@
  * Plugin Name: Paid Memberships Pro - SMTP
  * Plugin URI: https://www.paidmembershipspro.com/add-ons/pmpro-smtp
  * Description: Improve email deliverability for your membership site. Connect to SMTP providers and transactional email APIs with email logging and diagnostics.
- * Version: 0.1
+ * Version: 0.1.1
  * Author: Paid Memberships Pro
  * Author URI: https://www.paidmembershipspro.com
  * Text Domain: pmpro-smtp
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'PMPRO_SMTP_BASE_FILE', __FILE__ );
 define( 'PMPRO_SMTP_BASENAME', plugin_basename( __FILE__ ) );
 define( 'PMPRO_SMTP_DIR', dirname( __FILE__ ) );
-define( 'PMPRO_SMTP_VERSION', '0.1' );
+define( 'PMPRO_SMTP_VERSION', '0.1.1' );
 
 /**
  * Load plugin textdomain.

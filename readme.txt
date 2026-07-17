@@ -3,7 +3,7 @@ Contributors: strangerstudios
 Requires at least: 6.3
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1
+Stable tag: 0.1.1
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -52,12 +52,14 @@ Yes. Use the `Custom SMTP` connector with:
 
 No. PMPro core continues to handle email logging.
 
-= Why does my email header/footer look different on an API provider? =
+= Are emails formatted the same on an API provider as with Custom SMTP? =
 
-PMPro applies its optional `email_header.html` / `email_footer.html` theme templates (and `wpautop`/`make_clickable`) on the `phpmailer_init` action. API connectors (SendGrid, Mailgun, Postmark, Brevo, Resend, MailerSend) send via the provider's HTTP API and short-circuit WordPress before PHPMailer is constructed, so those legacy theme header/footer files are not applied on the API path. The `Custom SMTP` connector goes through PHPMailer and applies them as usual. If your theme ships those header/footer files and you need them on every send, use the `Custom SMTP` connector. (Most PMPro email templates already include their own HTML wrapping and are unaffected.)
+Yes. PMPro's email formatting — including the optional `email_header.html` / `email_footer.html` theme templates — is applied on both the `Custom SMTP` (PHPMailer) path and the API connector path.
 
 == Changelog ==
 
-= 0.1 - 2026-07-15 =
+= 0.1.1 - 2026-07-17 =
+* BUG FIX: Fixed an issue where emails sent through API-based connectors were missing PMPro's email formatting. #4 (@dparker1005)
 
+= 0.1 - 2026-07-15 =
 * Initial release.
