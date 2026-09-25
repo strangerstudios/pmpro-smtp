@@ -24,7 +24,7 @@ function pmpro_smtp_settings_page() {
 	$saved = false;
 	if (
 		isset( $_POST['pmpro_smtp_settings_nonce'] ) &&
-		wp_verify_nonce( wp_unslash( $_POST['pmpro_smtp_settings_nonce'] ), 'pmpro_smtp_settings_' . $active_tab )
+		wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pmpro_smtp_settings_nonce'] ) ), 'pmpro_smtp_settings_' . $active_tab )
 	) {
 		if ( 'connection' === $active_tab ) {
 			$saved = pmpro_smtp_save_connection_settings();
@@ -278,6 +278,7 @@ function pmpro_smtp_save_connection_settings() {
 		return false;
 	}
 
+	// phpcs:disable WordPress.Security.NonceVerification.Missing -- Only called from pmpro_smtp_settings_page() after wp_verify_nonce() on pmpro_smtp_settings_nonce.
 	$connectors = pmpro_smtp_get_connectors();
 
 	// Active connector.
@@ -317,7 +318,7 @@ function pmpro_smtp_save_connection_settings() {
 				continue;
 			}
 
-			$raw_value = wp_unslash( $_POST[ $post_key ] );
+			$raw_value = wp_unslash( $_POST[ $post_key ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized below by field type; secrets keep their exact bytes (trimmed, CR/LF stripped).
 
 			if ( 'password' === $field['type'] && ! empty( $field['sensitive'] ) ) {
 				// Store the secret with surrounding whitespace and any embedded
@@ -335,6 +336,7 @@ function pmpro_smtp_save_connection_settings() {
 
 		update_option( 'pmpro_smtp_connector_' . $key, $connector_data );
 	}
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 	return true;
 }
