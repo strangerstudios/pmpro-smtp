@@ -1,9 +1,9 @@
 === Paid Memberships Pro - SMTP ===
 Contributors: strangerstudios
 Requires at least: 6.3
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -57,6 +57,9 @@ No. PMPro core continues to handle email logging.
 Yes. PMPro's email formatting — including the optional `email_header.html` / `email_footer.html` theme templates — is applied on both the `Custom SMTP` (PHPMailer) path and the API connector path.
 
 == Changelog ==
+
+= 0.1.2 - 2026-09-29 =
+* SECURITY: Improved sanitization and escaping throughout the plugin to resolve Plugin Check security findings. #5 (@dparker1005)
 
 = 0.1.1 - 2026-07-17 =
 * BUG FIX: Fixed an issue where emails sent through API-based connectors were missing PMPro's email formatting. #4 (@dparker1005)
