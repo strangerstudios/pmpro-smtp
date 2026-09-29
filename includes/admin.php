@@ -49,7 +49,7 @@ function pmpro_smtp_admin_enqueue_scripts() {
 	// Only on our admin page. Gate on the page query arg (as PMPro core does)
 	// rather than the screen ID, which embeds PMPro's translated "Memberships"
 	// menu title and so differs on non-English admins.
-	if ( ! isset( $_REQUEST['page'] ) || 'pmpro-smtp' !== $_REQUEST['page'] ) {
+	if ( ! isset( $_REQUEST['page'] ) || 'pmpro-smtp' !== $_REQUEST['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only page check to decide whether to enqueue assets.
 		return;
 	}
 
