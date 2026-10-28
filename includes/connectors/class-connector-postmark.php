@@ -70,6 +70,12 @@ class PMPRO_SMTP_Connector_Postmark extends PMPRO_SMTP_Connector_Base {
 		if ( ! empty( $headers['reply-to'] ) ) {
 			$body['ReplyTo'] = $headers['reply-to'];
 		}
+		foreach ( $this->get_list_unsubscribe_headers( $headers ) as $name => $value ) {
+			$body['Headers'][] = array(
+				'Name'  => $name,
+				'Value' => $value,
+			);
+		}
 
 		$attachments = $this->build_base64_attachments( $atts, array( 'filename' => 'Name', 'contents' => 'Content', 'type' => 'ContentType' ) );
 		if ( ! empty( $attachments ) ) {
