@@ -114,7 +114,7 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		// when there are attachments we construct the multipart body manually
 		// and set the matching Content-Type boundary header.
 		if ( ! empty( $files ) ) {
-			$boundary       = wp_generate_password( 24, false );
+			$boundary       = bin2hex( random_bytes( 12 ) );
 			$request_body   = $this->build_multipart_body( $body, $files, $boundary );
 			$request_headers['Content-Type'] = 'multipart/form-data; boundary=' . $boundary;
 		} else {
