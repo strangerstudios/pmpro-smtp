@@ -3,7 +3,7 @@ Contributors: strangerstudios
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -57,6 +57,10 @@ No. PMPro core continues to handle email logging.
 Yes. PMPro's email formatting — including the optional `email_header.html` / `email_footer.html` theme templates — is applied on both the `Custom SMTP` (PHPMailer) path and the API connector path.
 
 == Changelog ==
+
+= 0.1.3 - 2026-11-19 =
+* BUG FIX: Fixed an issue where Mailgun emails with attachments could fail if another plugin filters `random_password`. #6 (@dparker1005)
+* BUG FIX: The Postmark, SendGrid, Mailgun, and Resend connectors now keep `List-Unsubscribe` headers, so email apps can show their unsubscribe button. #7 (@dparker1005)
 
 = 0.1.2 - 2026-09-29 =
 * SECURITY: Improved sanitization and escaping throughout the plugin to resolve Plugin Check security findings. #5 (@dparker1005)

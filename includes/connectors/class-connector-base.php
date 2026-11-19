@@ -230,7 +230,7 @@ abstract class PMPRO_SMTP_Connector_Base {
 	 * out of. API connectors build their own requests, so they need to pass
 	 * these headers on explicitly.
 	 *
-	 * @since TBD
+	 * @since 0.1.3
 	 *
 	 * @param array $headers Parsed headers from parse_headers().
 	 * @return array Header name => value.
