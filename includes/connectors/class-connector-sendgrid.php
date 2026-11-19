@@ -87,6 +87,11 @@ class PMPRO_SMTP_Connector_Sendgrid extends PMPRO_SMTP_Connector_Base {
 			}
 		}
 
+		$list_unsubscribe_headers = $this->get_list_unsubscribe_headers( $headers );
+		if ( ! empty( $list_unsubscribe_headers ) ) {
+			$body['headers'] = $list_unsubscribe_headers;
+		}
+
 		$attachments = $this->build_base64_attachments( $atts, array( 'contents' => 'content', 'filename' => 'filename', 'type' => 'type' ) );
 		if ( ! empty( $attachments ) ) {
 			$body['attachments'] = $attachments;

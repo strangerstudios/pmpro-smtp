@@ -73,6 +73,11 @@ class PMPRO_SMTP_Connector_Resend extends PMPRO_SMTP_Connector_Base {
 			$body['reply_to'] = $this->split_address_list( $headers['reply-to'] );
 		}
 
+		$list_unsubscribe_headers = $this->get_list_unsubscribe_headers( $headers );
+		if ( ! empty( $list_unsubscribe_headers ) ) {
+			$body['headers'] = $list_unsubscribe_headers;
+		}
+
 		$attachments = $this->build_base64_attachments( $atts, array( 'filename' => 'filename', 'contents' => 'content' ) );
 		if ( ! empty( $attachments ) ) {
 			$body['attachments'] = $attachments;

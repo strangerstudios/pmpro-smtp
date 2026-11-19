@@ -223,6 +223,30 @@ abstract class PMPRO_SMTP_Connector_Base {
 	}
 
 	/**
+	 * Get the List-Unsubscribe headers from a message's parsed headers.
+	 *
+	 * Email apps use these to show an unsubscribe button, and Gmail and Yahoo
+	 * expect them on bulk mail. PMPro adds them to emails that members can opt
+	 * out of. API connectors build their own requests, so they need to pass
+	 * these headers on explicitly.
+	 *
+	 * @since TBD
+	 *
+	 * @param array $headers Parsed headers from parse_headers().
+	 * @return array Header name => value.
+	 */
+	protected function get_list_unsubscribe_headers( array $headers ) {
+		$list_unsubscribe_headers = array();
+		foreach ( array( 'List-Unsubscribe', 'List-Unsubscribe-Post' ) as $name ) {
+			$key = strtolower( $name );
+			if ( ! empty( $headers[ $key ] ) ) {
+				$list_unsubscribe_headers[ $name ] = $headers[ $key ];
+			}
+		}
+		return $list_unsubscribe_headers;
+	}
+
+	/**
 	 * Normalize a $to value (which may be a comma-separated string) into an
 	 * array of individual recipient strings.
 	 *

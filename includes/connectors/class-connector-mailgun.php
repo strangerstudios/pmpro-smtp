@@ -87,6 +87,9 @@ class PMPRO_SMTP_Connector_Mailgun extends PMPRO_SMTP_Connector_Base {
 		if ( ! empty( $headers['reply-to'] ) ) {
 			$body['h:Reply-To'] = $headers['reply-to'];
 		}
+		foreach ( $this->get_list_unsubscribe_headers( $headers ) as $name => $value ) {
+			$body[ 'h:' . $name ] = $value;
+		}
 
 		// Every field so far becomes a header of the outgoing message, so strip
 		// CR/LF to keep a crafted subject or recipient from injecting extra
